@@ -269,7 +269,7 @@ async function persistAlerts(snapshot: Snapshot) {
         if (p.rxPower != null && p.rxPower < RX_TX_ALERT_THRESHOLD) {
           await createAlertIfNew({
             switchId: sw.switchId, portId: p.portId, severity: "warning", category: "optical",
-            message: `Rx power ${p.rxPower.toFixed(2)} dBm is below -16 dBm on ring port ${p.ifName} (${p.switchName})`,
+            message: `Rx power below -16 dBm on ring port ${p.ifName} (${p.switchName})`,
             value: p.rxPower.toFixed(2),
           });
         }
@@ -277,7 +277,7 @@ async function persistAlerts(snapshot: Snapshot) {
         if (p.txPower != null && p.txPower < RX_TX_ALERT_THRESHOLD) {
           await createAlertIfNew({
             switchId: sw.switchId, portId: p.portId, severity: "warning", category: "optical",
-            message: `Tx power ${p.txPower.toFixed(2)} dBm is below -16 dBm on ring port ${p.ifName} (${p.switchName})`,
+            message: `Tx power below -16 dBm on ring port ${p.ifName} (${p.switchName})`,
             value: p.txPower.toFixed(2),
           });
         }
@@ -285,7 +285,7 @@ async function persistAlerts(snapshot: Snapshot) {
         if (p.rxPower != null && p.rxAlarmLow != null && p.rxPower <= p.rxAlarmLow) {
           await createAlertIfNew({
             switchId: sw.switchId, portId: p.portId, severity: "critical", category: "optical",
-            message: `Rx power ${p.rxPower.toFixed(2)} dBm below alarm threshold ${p.rxAlarmLow.toFixed(2)} dBm on ring port ${p.ifName} (${p.switchName})`,
+            message: `Rx power below alarm threshold on ring port ${p.ifName} (${p.switchName})`,
             value: p.rxPower.toFixed(2),
           });
         }
@@ -307,7 +307,7 @@ async function persistAlerts(snapshot: Snapshot) {
           switchId: sw.switchId, portId: p.portId,
           severity: p.utilization > 95 ? "critical" : "warning",
           category: "traffic",
-          message: `High utilization ${p.utilization.toFixed(1)}% on ${p.ifName} (${p.switchName}, ${speedLabel} port) — threshold 80%`,
+          message: `High utilization on ${p.ifName} (${p.switchName}, ${speedLabel} port) — above 80%`,
           value: p.utilization.toFixed(1),
         });
       }
@@ -318,7 +318,7 @@ async function persistAlerts(snapshot: Snapshot) {
           switchId: sw.switchId, portId: p.portId,
           severity: p.totalErrors > 100 ? "critical" : "warning",
           category: "traffic",
-          message: `${p.totalErrors} interface errors on ${p.ifName} (${p.switchName})`,
+          message: `Interface errors on ${p.ifName} (${p.switchName})`,
           value: String(p.totalErrors),
         });
       }
