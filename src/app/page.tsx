@@ -724,6 +724,10 @@ export default function Home() {
         onOpenChange={setManageCompaniesOpen}
         companies={companiesQ.data ?? []}
         loading={companiesQ.isLoading}
+        onAddSwitch={() => {
+          setManageCompaniesOpen(false);
+          queueMicrotask(() => { setEditingSwitch(null); setSwitchFormOpen(true); });
+        }}
       />
 
       <SwitchFormDialog
@@ -2229,8 +2233,9 @@ function ManageCompaniesDialog(props: {
   onOpenChange: (o: boolean) => void;
   companies: CompanyRow[];
   loading: boolean;
+  onAddSwitch: () => void;
 }) {
-  const { open, onOpenChange, companies, loading } = props;
+  const { open, onOpenChange, companies, loading, onAddSwitch } = props;
   const queryClient = useQueryClient();
   const [newCompany, setNewCompany] = React.useState("");
   const [newCompanyDesc, setNewCompanyDesc] = React.useState("");
@@ -2429,7 +2434,11 @@ function ManageCompaniesDialog(props: {
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2">
+          <Button onClick={onAddSwitch} className="gap-1.5">
+            <Plus className="size-3.5" />
+            Add Switch
+          </Button>
           <DialogClose asChild>
             <Button variant="outline">Close</Button>
           </DialogClose>
