@@ -2269,17 +2269,3 @@ Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts_
 → 1172 await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].alert.create(
 Foreign key constraint violated on the foreign key
  GET /api/metrics 200 in 5ms (compile: 1944µs, render: 3ms)
- GET / 200 in 79ms (compile: 5ms, render: 74ms)
- GET /api/metrics 200 in 8ms (compile: 3ms, render: 5ms)
- GET /api/rings 200 in 8ms (compile: 2ms, render: 6ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 3ms, render: 6ms)
- GET /api/switches 200 in 7ms (compile: 3ms, render: 4ms)
- GET /api/companies 200 in 7ms (compile: 4ms, render: 3ms)
- GET /api/metrics 200 in 5ms (compile: 1971µs, render: 3ms)
- GET /api/metrics 200 in 7ms (compile: 3ms, render: 3ms)
- GET /api/switches 200 in 8ms (compile: 1818µs, render: 6ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 10ms (compile: 4ms, render: 6ms)
- GET /api/rings 200 in 6ms (compile: 2ms, render: 3ms)
- GET /api/companies 200 in 5ms (compile: 1173µs, render: 3ms)
- GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
- GET /api/metrics 200 in 5ms (compile: 1936µs, render: 3ms)
