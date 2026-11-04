@@ -1396,6 +1396,8 @@ function RingTraffic(props: {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="text-xs">From Switch</TableHead>
+                <TableHead className="text-xs">To Switch</TableHead>
                 <TableHead className="text-xs">
                   <button onClick={() => {
                     setStatusFilter(s => s === "all" ? "up" : s === "up" ? "down" : "all");
@@ -1404,8 +1406,6 @@ function RingTraffic(props: {
                     <Filter className={cn("size-3", statusFilter !== "all" && "text-primary")} />
                   </button>
                 </TableHead>
-                <TableHead className="text-xs">From Switch</TableHead>
-                <TableHead className="text-xs">To Switch</TableHead>
                 <TableHead className="text-xs cursor-pointer select-none hover:text-primary" onClick={() => cycleSort("inMbps")}>
                   <span className="flex items-center gap-1">In Mbps {sortIcon("inMbps")}</span>
                 </TableHead>
@@ -1433,12 +1433,6 @@ function RingTraffic(props: {
               ) : processed.map((l) => (
                 <TableRow key={l.id} className="text-xs">
                   <TableCell>
-                    <span className="flex items-center gap-1.5">
-                      <span className={cn("size-2 rounded-full", l.status === "up" ? "bg-ok" : "bg-crit")} />
-                      <span className={cn("font-medium", l.status === "up" ? "text-ok" : "text-crit")}>{l.status}</span>
-                    </span>
-                  </TableCell>
-                  <TableCell>
                     <button onClick={() => onSwitchClick(l.fromSwitchId)} className="text-left hover:text-primary hover:underline">
                       <div className="font-medium truncate max-w-[140px]">{l.fromSwitchName}</div>
                       <div className="text-[10px] text-muted-foreground font-mono truncate max-w-[140px]">{l.fromPortName}</div>
@@ -1449,6 +1443,12 @@ function RingTraffic(props: {
                       <div className="font-medium truncate max-w-[140px]">{l.toSwitchName}</div>
                       <div className="text-[10px] text-muted-foreground font-mono truncate max-w-[140px]">{l.toPortName}</div>
                     </button>
+                  </TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-1.5">
+                      <span className={cn("size-2 rounded-full", l.status === "up" ? "bg-ok" : "bg-crit")} />
+                      <span className={cn("font-medium", l.status === "up" ? "text-ok" : "text-crit")}>{l.status}</span>
+                    </span>
                   </TableCell>
                   <TableCell className="font-mono tabular-nums text-primary font-semibold">{fmtMbps(l.inMbps)}</TableCell>
                   <TableCell className="font-mono tabular-nums text-primary font-semibold">{fmtMbps(l.outMbps)}</TableCell>
