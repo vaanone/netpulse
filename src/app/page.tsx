@@ -586,17 +586,20 @@ export default function Home() {
   const totalRingLinks = links.length;
   const totalIngress = switches.reduce((a, s) => a + (s.ringInMbps ?? 0), 0);
   const totalEgress = switches.reduce((a, s) => a + (s.ringOutMbps ?? 0), 0);
-  const activeAlertsCount = alerts.length;
+  const activeAlertsCount = alerts.filter(a => !a.acknowledged && !a.resolved).length;
   const ringPortsCount = switches.filter(s => s.ringPort != null).length;
 
-  // Severity summary for alerts badge
-  const hasCritical = alerts.some(a => a.severity === "critical");
-  const hasWarning = alerts.some(a => a.severity === "warning");
-  const alertsBadgeClass = hasCritical
-    ? "bg-crit/20 text-crit border-crit/40"
-    : hasWarning
-      ? "bg-warn/20 text-warn border-warn/40"
-      : "bg-ok/20 text-ok border-ok/40";
+  // Severity summary for alerts badge — only count unacknowledged
+  const unackAlerts = alerts.filter(a => !a.acknowledged && !a.resolved);
+  const hasCritical = unackAlerts.some(a => a.severity === "critical");
+  const hasWarning = unackAlerts.some(a => a.severity === "warning");
+  const alertsBadgeClass = activeAlertsCount === 0
+    ? "bg-ok/20 text-ok border-ok/40"
+    : hasCritical
+      ? "bg-crit/20 text-crit border-crit/40"
+      : hasWarning
+        ? "bg-warn/20 text-warn border-warn/40"
+        : "bg-ok/20 text-ok border-ok/40";
 
   const detailSwitch = detailSwitchId ? switches.find(s => s.switchId === detailSwitchId) ?? null : null;
   const editingSwitchRow = editingSwitch ? (switchesQ.data?.find(s => s.id === editingSwitch.id) ?? editingSwitch) : null;
@@ -1709,7 +1712,7 @@ function AlertsFeed(props: {
   loading: boolean;
 }) {
   const { alerts, onOpenAll, onAck, onSwitchClick, loading } = props;
-  const display = alerts.slice(0, 20);
+  const display = alerts.filter(a => !a.acknowledged && !a.resolved).slice(0, 20);
 
   return (
     <PanelCard id="alerts" className="scroll-mt-24 py-4">
