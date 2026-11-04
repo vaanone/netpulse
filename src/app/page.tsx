@@ -1981,18 +1981,15 @@ function AllInterfaces(props: {
 function Footer({ polledAt }: { polledAt?: string }) {
   return (
     <footer className="mt-auto border-t border-border/60 bg-panel/80 backdrop-blur">
-      <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6 h-10 flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="size-1.5 rounded-full bg-primary shrink-0" />
-          <span className="truncate">NETPULSE · ISP Network Monitoring Tool - A Creation by JJ</span>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <span className="hidden sm:inline">{POLL_INTERVAL_LABEL}</span>
-          <span className="hidden sm:inline">·</span>
-          <span>{AUTO_REFRESH_LABEL}</span>
-          <span>·</span>
-          <span>Last poll <span className="text-foreground font-mono">{polledAt ? fmtTime(polledAt) : "—"}</span></span>
-        </div>
+      <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6 h-10 flex items-center justify-center text-[10px] sm:text-xs text-muted-foreground gap-2 flex-wrap">
+        <span className="size-1.5 rounded-full bg-primary shrink-0" />
+        <span className="truncate">NETPULSE · ISP Network Monitoring Tool - A Creation by JJ</span>
+        <span className="hidden sm:inline">·</span>
+        <span className="hidden sm:inline">{POLL_INTERVAL_LABEL}</span>
+        <span>·</span>
+        <span>{AUTO_REFRESH_LABEL}</span>
+        <span>·</span>
+        <span>Last poll <span className="text-foreground font-mono">{polledAt ? fmtTime(polledAt) : "—"}</span></span>
       </div>
     </footer>
   );
