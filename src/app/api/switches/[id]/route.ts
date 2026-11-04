@@ -47,13 +47,34 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
+  
+  // Get the switch we're deleting and its predecessor (the switch pointing to it)
   const target = await db.switch.findUnique({ where: { id }, select: { nextSwitchId: true } });
   const predecessor = await db.switch.findFirst({ where: { nextSwitchId: id } });
+  
+  // Step 1: Clear ALL references pointing to this switch (nextSwitchId)
+  // This prevents foreign key constraint violations
   await db.switch.updateMany({ where: { nextSwitchId: id }, data: { nextSwitchId: null } });
+  
+  // Step 2: Delete the switch (cascades to ports, metrics, alerts, neighbors)
   await db.switch.delete({ where: { id } });
+  
+  // Step 3: Relink predecessor → successor to keep ring closed
+  // predecessor was pointing to this switch (now null), 
+  // this switch was pointing to target.nextSwitchId (successor)
+  // So: predecessor.nextSwitchId = target.nextSwitchId
   if (predecessor && target?.nextSwitchId && predecessor.id !== target.nextSwitchId) {
-    const otherPointer = await db.switch.findFirst({ where: { nextSwitchId: target.nextSwitchId, NOT: { id: predecessor.id } } });
-    if (!otherPointer) await db.switch.update({ where: { id: predecessor.id }, data: { nextSwitchId: target.nextSwitchId } });
+    // Check if the successor is already pointed to by someone else
+    const otherPointer = await db.switch.findFirst({
+      where: { nextSwitchId: target.nextSwitchId, NOT: { id: predecessor.id } },
+    });
+    if (!otherPointer) {
+      await db.switch.update({
+        where: { id: predecessor.id },
+        data: { nextSwitchId: target.nextSwitchId },
+      });
+    }
   }
+  
   return NextResponse.json({ ok: true });
 }

@@ -51,7 +51,7 @@ model Switch {
   ringId          String?
   ring            Ring?    @relation(fields: [ringId], references: [id], onDelete: SetNull)
   nextSwitchId    String?  @unique
-  nextSwitch      Switch?  @relation("RingNext", fields: [nextSwitchId], references: [id])
+  nextSwitch      Switch?  @relation("RingNext", fields: [nextSwitchId], references: [id], onDelete: SetNull)
   prevSwitches    Switch[] @relation("RingNext")
   status          String   @default("unknown")
   lastSeen        DateTime?
