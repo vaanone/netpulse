@@ -3146,7 +3146,15 @@ function SwitchDetailDialog(props: {
           </DetailCard>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="destructive"
+            onClick={() => setDeleteGate(true)}
+            className="gap-1.5"
+          >
+            <Trash2 className="size-3.5" />
+            Delete Switch
+          </Button>
           <DialogClose asChild>
             <Button variant="outline">Close</Button>
           </DialogClose>
