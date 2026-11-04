@@ -617,7 +617,7 @@ export default function Home() {
         polling={pollMut.isPending}
       />
 
-      <main className="flex-1 px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6 max-w-[1800px] w-full mx-auto">
+      <main className="px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6 max-w-[1800px] w-full mx-auto">
         {/* a. Summary KPIs */}
         <SummaryKpis
           switchesUp={switchesUp}
@@ -1980,7 +1980,7 @@ function AllInterfaces(props: {
 
 function Footer({ polledAt }: { polledAt?: string }) {
   return (
-    <footer className="border-t border-border/60 bg-panel/80 backdrop-blur sticky bottom-0 z-30">
+    <footer className="border-t border-border/60 bg-panel/95 backdrop-blur mt-auto">
       <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6 h-10 flex items-center justify-center text-[10px] sm:text-xs text-muted-foreground gap-2 flex-wrap">
         <span className="size-1.5 rounded-full bg-primary shrink-0" />
         <span className="truncate">NETPULSE · ISP Network Monitoring Tool - A Creation by JJ</span>
