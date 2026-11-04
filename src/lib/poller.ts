@@ -242,10 +242,21 @@ async function persistSwitchSnapshot(switchId: string, poll: PollResult, ports: 
 }
 
 async function persistAlerts(snapshot: Snapshot) {
+  // Fixed Rx power threshold: alert if Rx power drops below -16 dBm
+  const RX_POWER_ALERT_THRESHOLD = -16.0;
+
   for (const sw of snapshot.switches) {
     for (const p of sw.ports) {
-      if (p.rxPower != null && p.rxAlarmLow != null && p.rxPower <= p.rxAlarmLow) {
-        await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: "critical", category: "optical", message: `Rx power ${p.rxPower.toFixed(2)} dBm below alarm threshold ${p.rxAlarmLow.toFixed(2)} dBm on ${p.ifName}`, value: p.rxPower.toFixed(2) });
+      // Rx power alert — check both the transceiver's alarm threshold AND the fixed -16 dBm threshold
+      if (p.rxPower != null) {
+        // Check transceiver-specific alarm threshold (e.g., -13 dBm)
+        if (p.rxAlarmLow != null && p.rxPower <= p.rxAlarmLow) {
+          await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: "critical", category: "optical", message: `Rx power ${p.rxPower.toFixed(2)} dBm below alarm threshold ${p.rxAlarmLow.toFixed(2)} dBm on ${p.ifName}`, value: p.rxPower.toFixed(2) });
+        }
+        // Check fixed -16 dBm threshold — alert if Rx power is below -16 dBm
+        if (p.rxPower < RX_POWER_ALERT_THRESHOLD) {
+          await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: "warning", category: "optical", message: `Rx power ${p.rxPower.toFixed(2)} dBm is below -16 dBm on ${p.ifName} (${p.switchName})`, value: p.rxPower.toFixed(2) });
+        }
       }
       if (p.totalErrors > 0) {
         await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: p.totalErrors > 100 ? "critical" : "warning", category: "traffic", message: `${p.totalErrors} interface errors on ${p.ifName} (${p.switchName})`, value: String(p.totalErrors) });
