@@ -186,9 +186,9 @@ const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
   { id: "ring-traffic", label: "Ring Traffic", icon: <Activity className="size-3.5" /> },
   { id: "switch-health", label: "Switch Health", icon: <Cpu className="size-3.5" /> },
   { id: "sfp-dom", label: "SFP DOM", icon: <Signal className="size-3.5" /> },
-  { id: "alerts", label: "Alerts", icon: <Bell className="size-3.5" /> },
   { id: "switches", label: "Switches", icon: <Server className="size-3.5" /> },
   { id: "all-interfaces", label: "All Interfaces", icon: <LayoutGrid className="size-3.5" /> },
+  { id: "alerts", label: "Alerts", icon: <Bell className="size-3.5" /> },
 ];
 
 // ---------------------------------------------------------------------------
@@ -653,29 +653,12 @@ export default function Home() {
           onSwitchClick={(id) => setDetailSwitchId(id)}
         />
 
-        {/* f. Main grid: SFP DOM (2 cols) + Alerts + Switches (1 col) */}
+        {/* f. Main grid: SFP DOM (2 cols) + Switches (1 col) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
           <div className="lg:col-span-2">
             <SfpDomCards switches={switches} onSwitchClick={(id) => setDetailSwitchId(id)} />
           </div>
           <div className="space-y-5 sm:space-y-6">
-            <AlertsFeed
-              alerts={alerts}
-              onOpenAll={() => { setShowAllAlerts(true); setAllAlertsOpen(true); }}
-              onAck={async (id) => {
-                try {
-                  const r = await fetch(`/api/alerts/${id}/ack`, { method: "POST" });
-                  if (!r.ok) throw new Error("Ack failed");
-                  toast.success("Alert acknowledged");
-                  queueMicrotask(() => {
-                    queryClient.invalidateQueries({ queryKey: ["alerts"] });
-                    queryClient.invalidateQueries({ queryKey: ["alerts-all"] });
-                  });
-                } catch (e: any) { toast.error(e.message); }
-              }}
-              onSwitchClick={(id) => setDetailSwitchId(id)}
-              loading={alertsQ.isLoading}
-            />
             <SwitchesList
               switches={switches}
               rows={switchesQ.data ?? []}
@@ -687,6 +670,25 @@ export default function Home() {
 
         {/* g. All Interfaces */}
         <AllInterfaces switches={switches} onSwitchClick={(id) => setDetailSwitchId(id)} />
+
+        {/* h. Alerts Feed — below All Interfaces */}
+        <AlertsFeed
+          alerts={alerts}
+          onOpenAll={() => { setShowAllAlerts(true); setAllAlertsOpen(true); }}
+          onAck={async (id) => {
+            try {
+              const r = await fetch(`/api/alerts/${id}/ack`, { method: "POST" });
+              if (!r.ok) throw new Error("Ack failed");
+              toast.success("Alert acknowledged");
+              queueMicrotask(() => {
+                queryClient.invalidateQueries({ queryKey: ["alerts"] });
+                queryClient.invalidateQueries({ queryKey: ["alerts-all"] });
+              });
+            } catch (e: any) { toast.error(e.message); }
+          }}
+          onSwitchClick={(id) => setDetailSwitchId(id)}
+          loading={alertsQ.isLoading}
+        />
       </main>
 
       {/* =========================================================
