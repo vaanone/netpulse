@@ -6,8 +6,6 @@ generator client {
 }
 
 datasource db {
-  // SQLite for local dev. For Vercel deployment, use prisma/schema-vercel.prisma
-  // which sets provider = postgresql for Vercel Postgres.
   provider = sqlite
   url      = env("DATABASE_URL")
 }
