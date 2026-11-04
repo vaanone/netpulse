@@ -1838,3 +1838,8 @@ Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allow
  GET /api/rings 200 in 5ms (compile: 1086µs, render: 4ms)
  GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 1375µs, render: 5ms)
  GET /api/metrics 200 in 6ms (compile: 1961µs, render: 4ms)
+ GET /api/switches 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 1785µs, render: 7ms)
+ GET /api/rings 200 in 10ms (compile: 4ms, render: 5ms)
+ GET /api/companies 200 in 5ms (compile: 1403µs, render: 4ms)
+ GET /api/metrics 200 in 6ms (compile: 1848µs, render: 4ms)
