@@ -2246,3 +2246,40 @@ Foreign key constraint violated on the foreign key
  POST /api/poll 200 in 5ms (compile: 1957µs, render: 3ms)
  GET /api/switches 200 in 47ms (compile: 3ms, render: 44ms)
  DELETE /api/switches/cmw1hbdw5000fsr1yogcp5z40 200 in 85ms (compile: 61ms, render: 25ms)
+ GET /api/companies 200 in 13ms (compile: 3ms, render: 9ms)
+ GET /api/switches 200 in 12ms (compile: 3ms, render: 9ms)
+ GET /api/rings 200 in 14ms (compile: 7ms, render: 7ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 3ms, render: 6ms)
+prisma:error 
+Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].sfpPort.create()` invocation in
+/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__71936966._.js:1015:149
+
+  1012     },
+  1013     data
+  1014 });
+→ 1015 else await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].sfpPort.create(
+Foreign key constraint violated on the foreign key
+prisma:error 
+Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].alert.create()` invocation in
+/home/z/my-project/.next/dev/server/chunks/[root-of-the-server]__71936966._.js:1172:138
+
+  1169     }
+  1170 });
+  1171 if (existing) return;
+→ 1172 await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$db$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["db"].alert.create(
+Foreign key constraint violated on the foreign key
+ GET /api/metrics 200 in 5ms (compile: 1944µs, render: 3ms)
+ GET / 200 in 79ms (compile: 5ms, render: 74ms)
+ GET /api/metrics 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/rings 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 3ms, render: 6ms)
+ GET /api/switches 200 in 7ms (compile: 3ms, render: 4ms)
+ GET /api/companies 200 in 7ms (compile: 4ms, render: 3ms)
+ GET /api/metrics 200 in 5ms (compile: 1971µs, render: 3ms)
+ GET /api/metrics 200 in 7ms (compile: 3ms, render: 3ms)
+ GET /api/switches 200 in 8ms (compile: 1818µs, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 10ms (compile: 4ms, render: 6ms)
+ GET /api/rings 200 in 6ms (compile: 2ms, render: 3ms)
+ GET /api/companies 200 in 5ms (compile: 1173µs, render: 3ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/metrics 200 in 5ms (compile: 1936µs, render: 3ms)
