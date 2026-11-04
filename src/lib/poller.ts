@@ -242,37 +242,108 @@ async function persistSwitchSnapshot(switchId: string, poll: PollResult, ports: 
 }
 
 async function persistAlerts(snapshot: Snapshot) {
-  // Fixed Rx power threshold: alert if Rx power drops below -16 dBm
-  const RX_POWER_ALERT_THRESHOLD = -16.0;
+  // ─── Alert thresholds ─────────────────────────────────────────────
+  // Only generate alerts for SFP fiber ports that are part of the ring.
+  // Access/copper ports are not monitored for optical alerts.
+  //
+  // 1. Rx power below -16 dBm → warning (weak receive signal)
+  // 2. Tx power below -16 dBm → warning (weak transmit signal)
+  // 3. Utilization above 80% → warning (traffic approaching limit)
+  //    This works for any link speed: 1G at 800 Mbps = 80%, 10G at 8 Gbps = 80%
+  // 4. Ring port down → critical (link failure)
+  // 5. Interface errors > 0 → warning
+  // 6. CPU > 80% → warning
+  // 7. Memory > 85% → warning
+  const RX_TX_ALERT_THRESHOLD = -16.0;
+  const UTILIZATION_ALERT_THRESHOLD = 80.0;
 
   for (const sw of snapshot.switches) {
     for (const p of sw.ports) {
-      // Rx power alert — check both the transceiver's alarm threshold AND the fixed -16 dBm threshold
-      if (p.rxPower != null) {
-        // Check transceiver-specific alarm threshold (e.g., -13 dBm)
-        if (p.rxAlarmLow != null && p.rxPower <= p.rxAlarmLow) {
-          await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: "critical", category: "optical", message: `Rx power ${p.rxPower.toFixed(2)} dBm below alarm threshold ${p.rxAlarmLow.toFixed(2)} dBm on ${p.ifName}`, value: p.rxPower.toFixed(2) });
+      // ── Optical alerts: ONLY for ring ports with SFP fiber ──
+      // Only check Rx/Tx power if this is a ring port (isRingPort = true)
+      // and it has DOM readings (txPower or rxPower is not null = SFP transceiver present)
+      const isSfpFiberRingPort = p.isRingPort && (p.txPower !== null || p.rxPower !== null);
+
+      if (isSfpFiberRingPort) {
+        // Rx power alert — below -16 dBm
+        if (p.rxPower != null && p.rxPower < RX_TX_ALERT_THRESHOLD) {
+          await createAlertIfNew({
+            switchId: sw.switchId, portId: p.portId, severity: "warning", category: "optical",
+            message: `Rx power ${p.rxPower.toFixed(2)} dBm is below -16 dBm on ring port ${p.ifName} (${p.switchName})`,
+            value: p.rxPower.toFixed(2),
+          });
         }
-        // Check fixed -16 dBm threshold — alert if Rx power is below -16 dBm
-        if (p.rxPower < RX_POWER_ALERT_THRESHOLD) {
-          await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: "warning", category: "optical", message: `Rx power ${p.rxPower.toFixed(2)} dBm is below -16 dBm on ${p.ifName} (${p.switchName})`, value: p.rxPower.toFixed(2) });
+        // Tx power alert — below -16 dBm
+        if (p.txPower != null && p.txPower < RX_TX_ALERT_THRESHOLD) {
+          await createAlertIfNew({
+            switchId: sw.switchId, portId: p.portId, severity: "warning", category: "optical",
+            message: `Tx power ${p.txPower.toFixed(2)} dBm is below -16 dBm on ring port ${p.ifName} (${p.switchName})`,
+            value: p.txPower.toFixed(2),
+          });
+        }
+        // Transceiver-specific alarm threshold (e.g., -13 dBm) — critical
+        if (p.rxPower != null && p.rxAlarmLow != null && p.rxPower <= p.rxAlarmLow) {
+          await createAlertIfNew({
+            switchId: sw.switchId, portId: p.portId, severity: "critical", category: "optical",
+            message: `Rx power ${p.rxPower.toFixed(2)} dBm below alarm threshold ${p.rxAlarmLow.toFixed(2)} dBm on ring port ${p.ifName} (${p.switchName})`,
+            value: p.rxPower.toFixed(2),
+          });
         }
       }
-      if (p.totalErrors > 0) {
-        await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: p.totalErrors > 100 ? "critical" : "warning", category: "traffic", message: `${p.totalErrors} interface errors on ${p.ifName} (${p.switchName})`, value: String(p.totalErrors) });
-      }
+
+      // ── Ring port link down alert ──
       if (p.isRingPort && p.ifOperStatus !== 1) {
-        await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: "critical", category: "link", message: `Ring port ${p.ifName} on ${p.switchName} is DOWN`, value: String(p.ifOperStatus) });
+        await createAlertIfNew({
+          switchId: sw.switchId, portId: p.portId, severity: "critical", category: "link",
+          message: `Ring port ${p.ifName} on ${p.switchName} is DOWN`,
+          value: String(p.ifOperStatus),
+        });
       }
-      if (p.utilization != null && p.utilization > 85) {
-        await createAlertIfNew({ switchId: sw.switchId, portId: p.portId, severity: p.utilization > 95 ? "critical" : "warning", category: "traffic", message: `High utilization ${p.utilization.toFixed(1)}% on ${p.ifName} (${p.switchName})`, value: p.utilization.toFixed(1) });
+
+      // ── Utilization alert: above 80% for any port (1G, 10G, etc.) ──
+      if (p.utilization != null && p.utilization > UTILIZATION_ALERT_THRESHOLD) {
+        const speedLabel = p.ifHighSpeed ? (p.ifHighSpeed >= 1000 ? `${p.ifHighSpeed / 1000}G` : `${p.ifHighSpeed}M`) : "?";
+        await createAlertIfNew({
+          switchId: sw.switchId, portId: p.portId,
+          severity: p.utilization > 95 ? "critical" : "warning",
+          category: "traffic",
+          message: `High utilization ${p.utilization.toFixed(1)}% on ${p.ifName} (${p.switchName}, ${speedLabel} port) — threshold 80%`,
+          value: p.utilization.toFixed(1),
+        });
+      }
+
+      // ── Interface errors alert ──
+      if (p.totalErrors > 0) {
+        await createAlertIfNew({
+          switchId: sw.switchId, portId: p.portId,
+          severity: p.totalErrors > 100 ? "critical" : "warning",
+          category: "traffic",
+          message: `${p.totalErrors} interface errors on ${p.ifName} (${p.switchName})`,
+          value: String(p.totalErrors),
+        });
       }
     }
+
+    // ── CPU alert ──
     if (sw.cpuUsage != null && sw.cpuUsage > 80) {
-      await createAlertIfNew({ switchId: sw.switchId, portId: null, severity: sw.cpuUsage > 90 ? "critical" : "warning", category: "health", message: `CPU usage ${sw.cpuUsage.toFixed(1)}% on ${sw.name}`, value: sw.cpuUsage.toFixed(1) });
+      await createAlertIfNew({
+        switchId: sw.switchId, portId: null,
+        severity: sw.cpuUsage > 90 ? "critical" : "warning",
+        category: "health",
+        message: `CPU usage ${sw.cpuUsage.toFixed(1)}% on ${sw.name}`,
+        value: sw.cpuUsage.toFixed(1),
+      });
     }
+
+    // ── Memory alert ──
     if (sw.memoryUsage != null && sw.memoryUsage > 85) {
-      await createAlertIfNew({ switchId: sw.switchId, portId: null, severity: sw.memoryUsage > 95 ? "critical" : "warning", category: "health", message: `Memory usage ${sw.memoryUsage.toFixed(1)}% on ${sw.name}`, value: sw.memoryUsage.toFixed(1) });
+      await createAlertIfNew({
+        switchId: sw.switchId, portId: null,
+        severity: sw.memoryUsage > 95 ? "critical" : "warning",
+        category: "health",
+        message: `Memory usage ${sw.memoryUsage.toFixed(1)}% on ${sw.name}`,
+        value: sw.memoryUsage.toFixed(1),
+      });
     }
   }
 }
