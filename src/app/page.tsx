@@ -3020,6 +3020,167 @@ function SwitchDetailDialog(props: {
             </div>
           </DetailCard>
 
+          {/* RSTP / MSTP Data Flow Direction */}
+          <DetailCard title="RSTP / MSTP — Data Flow Direction" icon={<Workflow className="size-4" />}>
+            <div className="space-y-3">
+              {/* Flow diagram */}
+              <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap py-2">
+                {/* Previous switch (ingress) */}
+                {sw.prevSwitchId ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="px-3 py-2 rounded-lg border border-border/60 bg-muted/20 text-center min-w-[80px]">
+                      <div className="text-[10px] text-muted-foreground">Previous</div>
+                      <div className="text-xs font-semibold">{sw.prevSwitchId}</div>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] border-ok/40 text-ok">
+                      <ArrowRight className="size-2.5 mr-0.5" />
+                      {fmtMbps(sw.ringInMbps)} IN
+                    </Badge>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="px-3 py-2 rounded-lg border border-dashed border-border/40 text-center min-w-[80px] opacity-50">
+                      <div className="text-[10px] text-muted-foreground">Previous</div>
+                      <div className="text-xs">—</div>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] opacity-50">No ingress</Badge>
+                  </div>
+                )}
+
+                {/* Arrow → */}
+                <div className="flex flex-col items-center">
+                  <ArrowRight className="size-5 text-primary" />
+                  <span className="text-[9px] text-primary font-mono">{fmtMbps(sw.ringInMbps)} ↓</span>
+                </div>
+
+                {/* This switch */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className="px-4 py-3 rounded-lg border-2 border-primary/50 bg-primary/10 text-center min-w-[100px]">
+                    <div className="text-[10px] text-primary">This Switch</div>
+                    <div className="text-sm font-bold">{sw.name}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono">{sw.ipAddress}</div>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] border-primary/40 text-primary">
+                    RSTP: Forwarding
+                  </Badge>
+                </div>
+
+                {/* Arrow → */}
+                <div className="flex flex-col items-center">
+                  <ArrowRight className="size-5 text-primary" />
+                  <span className="text-[9px] text-primary font-mono">{fmtMbps(sw.ringOutMbps)} ↑</span>
+                </div>
+
+                {/* Next switch (egress) */}
+                {sw.nextSwitchId && sw.nextSwitchName ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="px-3 py-2 rounded-lg border border-border/60 bg-muted/20 text-center min-w-[80px]">
+                      <div className="text-[10px] text-muted-foreground">Next</div>
+                      <div className="text-xs font-semibold">{sw.nextSwitchName}</div>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] border-ok/40 text-ok">
+                      {fmtMbps(sw.ringOutMbps)} OUT
+                      <ArrowRight className="size-2.5 ml-0.5" />
+                    </Badge>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="px-3 py-2 rounded-lg border border-dashed border-border/40 text-center min-w-[80px] opacity-50">
+                      <div className="text-[10px] text-muted-foreground">Next</div>
+                      <div className="text-xs">—</div>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] opacity-50">No egress</Badge>
+                  </div>
+                )}
+              </div>
+
+              {/* RSTP Port Roles Table */}
+              <div className="rounded-lg border border-border/40 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/20 text-muted-foreground">
+                      <th className="text-left font-medium py-1.5 px-2">Port</th>
+                      <th className="text-left font-medium py-1.5 px-2">Direction</th>
+                      <th className="text-left font-medium py-1.5 px-2">RSTP Role</th>
+                      <th className="text-right font-medium py-1.5 px-2">Traffic</th>
+                      <th className="text-right font-medium py-1.5 px-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Ingress port (from previous switch) */}
+                    {sw.prevSwitchId && (
+                      <tr className="border-t border-border/30">
+                        <td className="py-1.5 px-2 font-mono">{sw.ringPort?.ifName ?? "—"}</td>
+                        <td className="py-1.5 px-2">
+                          <span className="flex items-center gap-1 text-ok">
+                            <ArrowRight className="size-3" /> Ingress (IN)
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <Badge variant="outline" className="text-[9px] border-ok/40 text-ok">Forwarding</Badge>
+                        </td>
+                        <td className="py-1.5 px-2 text-right font-mono text-primary">{fmtMbps(sw.ringInMbps)}</td>
+                        <td className="py-1.5 px-2 text-right">
+                          <Badge variant="outline" className={cn("text-[9px]", sw.ringPort?.ifOperStatus === 1 ? "border-ok/40 text-ok" : "border-crit/40 text-crit")}>
+                            {sw.ringPort?.ifOperStatus === 1 ? "UP" : "DOWN"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    )}
+                    {/* Egress port (to next switch) */}
+                    {sw.nextSwitchId && (
+                      <tr className="border-t border-border/30">
+                        <td className="py-1.5 px-2 font-mono">{sw.ringPort?.ifName ?? "—"}</td>
+                        <td className="py-1.5 px-2">
+                          <span className="flex items-center gap-1 text-primary">
+                            <ArrowRight className="size-3" /> Egress (OUT)
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <Badge variant="outline" className="text-[9px] border-ok/40 text-ok">Forwarding</Badge>
+                        </td>
+                        <td className="py-1.5 px-2 text-right font-mono text-primary">{fmtMbps(sw.ringOutMbps)}</td>
+                        <td className="py-1.5 px-2 text-right">
+                          <Badge variant="outline" className={cn("text-[9px]", sw.ringPort?.ifOperStatus === 1 ? "border-ok/40 text-ok" : "border-crit/40 text-crit")}>
+                            {sw.ringPort?.ifOperStatus === 1 ? "UP" : "DOWN"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    )}
+                    {/* Blocked port (RSTP alternate) */}
+                    {!sw.prevSwitchId && !sw.nextSwitchId && (
+                      <tr className="border-t border-border/30">
+                        <td colSpan={5} className="py-2 px-2 text-center text-muted-foreground">
+                          Not part of a ring — no RSTP data flow.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* RSTP summary */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="rounded-md bg-muted/20 p-2">
+                  <div className="text-[10px] text-muted-foreground">Protocol</div>
+                  <div className="font-mono font-semibold">RSTP/MSTP</div>
+                </div>
+                <div className="rounded-md bg-muted/20 p-2">
+                  <div className="text-[10px] text-muted-foreground">Ring Port</div>
+                  <div className="font-mono font-semibold">{sw.ringPort?.ifName ?? "—"}</div>
+                </div>
+                <div className="rounded-md bg-muted/20 p-2">
+                  <div className="text-[10px] text-muted-foreground">Port Role</div>
+                  <div className="font-semibold text-ok">Forwarding</div>
+                </div>
+                <div className="rounded-md bg-muted/20 p-2">
+                  <div className="text-[10px] text-muted-foreground">Auto-Detected</div>
+                  <div className="font-semibold text-ok">{sw.ringPortAutoDetected ? "Yes (CDP/LLDP)" : "No"}</div>
+                </div>
+              </div>
+            </div>
+          </DetailCard>
+
           {/* Ring Port card */}
           {sw.ringPort && (
             <DetailCard title="Ring Port" icon={<Cable className="size-4" />}>
