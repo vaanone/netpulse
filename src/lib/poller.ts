@@ -349,8 +349,19 @@ async function persistAlerts(snapshot: Snapshot) {
 }
 
 async function createAlertIfNew(input: { switchId: string; portId: string | null; severity: string; category: string; message: string; value?: string }) {
+  // Check if there's an existing alert with the same message in the last 10 minutes.
+  // This includes BOTH acknowledged AND unacknowledged alerts — so that
+  // acknowledging an alert doesn't cause a duplicate to be created on the
+  // next poll cycle.
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
-  const existing = await db.alert.findFirst({ where: { switchId: input.switchId, portId: input.portId, message: input.message, timestamp: { gte: tenMinAgo }, resolved: false } });
+  const existing = await db.alert.findFirst({
+    where: {
+      switchId: input.switchId,
+      portId: input.portId,
+      message: input.message,
+      timestamp: { gte: tenMinAgo },
+    },
+  });
   if (existing) return;
   await db.alert.create({ data: input });
 }
