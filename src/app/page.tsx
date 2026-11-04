@@ -515,7 +515,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load alerts");
       return r.json();
     },
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   const [showAllAlerts, setShowAllAlerts] = React.useState(false);
@@ -683,10 +683,11 @@ export default function Home() {
               const r = await fetch(`/api/alerts/${id}/ack`, { method: "POST" });
               if (!r.ok) throw new Error("Ack failed");
               toast.success("Alert acknowledged");
-              queueMicrotask(() => {
-                queryClient.invalidateQueries({ queryKey: ["alerts"] });
-                queryClient.invalidateQueries({ queryKey: ["alerts-all"] });
-              });
+              // Immediately update the local cache — remove the acked alert from the list
+              queryClient.setQueryData<AlertRow[]>(["alerts"], (old) => (old ?? []).map(a => a.id === id ? { ...a, acknowledged: true } : a));
+              queryClient.setQueryData<AlertRow[]>(["alerts-all"], (old) => (old ?? []).map(a => a.id === id ? { ...a, acknowledged: true } : a));
+              // Also force a refetch to get the server's latest state
+              queryClient.refetchQueries({ queryKey: ["alerts"] });
             } catch (e: any) { toast.error(e.message); }
           }}
           onSwitchClick={(id) => setDetailSwitchId(id)}
@@ -3323,12 +3324,13 @@ function AllAlertsDialog(props: {
       if (!r.ok) throw new Error("Ack failed");
       return r.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       toast.success("Alert acknowledged");
-      queueMicrotask(() => {
-        queryClient.invalidateQueries({ queryKey: ["alerts"] });
-        queryClient.invalidateQueries({ queryKey: ["alerts-all"] });
-      });
+      // Immediately update local cache
+      queryClient.setQueryData<AlertRow[]>(["alerts"], (old) => (old ?? []).map(a => a.id === id ? { ...a, acknowledged: true } : a));
+      queryClient.setQueryData<AlertRow[]>(["alerts-all"], (old) => (old ?? []).map(a => a.id === id ? { ...a, acknowledged: true } : a));
+      // Force refetch
+      queryClient.refetchQueries({ queryKey: ["alerts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -3339,12 +3341,13 @@ function AllAlertsDialog(props: {
       if (!r.ok) throw new Error("Resolve failed");
       return r.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       toast.success("Alert resolved");
-      queueMicrotask(() => {
-        queryClient.invalidateQueries({ queryKey: ["alerts"] });
-        queryClient.invalidateQueries({ queryKey: ["alerts-all"] });
-      });
+      // Immediately remove from cache
+      queryClient.setQueryData<AlertRow[]>(["alerts"], (old) => (old ?? []).filter(a => a.id !== id));
+      queryClient.setQueryData<AlertRow[]>(["alerts-all"], (old) => (old ?? []).map(a => a.id === id ? { ...a, resolved: true, acknowledged: true } : a));
+      // Force refetch
+      queryClient.refetchQueries({ queryKey: ["alerts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -3353,12 +3356,14 @@ function AllAlertsDialog(props: {
     mutationFn: async (ids: string[]) => {
       await Promise.all(ids.map(id => fetch(`/api/alerts/${id}/ack`, { method: "POST" })));
     },
-    onSuccess: () => {
+    onSuccess: (_data, ids) => {
       toast.success("All alerts acknowledged");
-      queueMicrotask(() => {
-        queryClient.invalidateQueries({ queryKey: ["alerts"] });
-        queryClient.invalidateQueries({ queryKey: ["alerts-all"] });
-      });
+      // Immediately update local cache — mark all acked alerts
+      queryClient.setQueryData<AlertRow[]>(["alerts"], (old) => (old ?? []).map(a => ids.includes(a.id) ? { ...a, acknowledged: true } : a));
+      queryClient.setQueryData<AlertRow[]>(["alerts-all"], (old) => (old ?? []).map(a => ids.includes(a.id) ? { ...a, acknowledged: true } : a));
+      // Force refetch for server's latest state
+      queryClient.refetchQueries({ queryKey: ["alerts"] });
+      queryClient.refetchQueries({ queryKey: ["alerts-all"] });
     },
     onError: () => toast.error("Failed to ack all"),
   });
