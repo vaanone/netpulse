@@ -668,3 +668,33 @@ Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allow
  GET /api/rings 200 in 6ms (compile: 1499µs, render: 4ms)
  GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 1915µs, render: 7ms)
  GET /api/metrics 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/metrics 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/switches 200 in 12ms (compile: 4ms, render: 8ms)
+ GET /api/companies 200 in 6ms (compile: 1662µs, render: 4ms)
+ GET /api/rings 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 1761µs, render: 6ms)
+ GET /api/metrics 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/alerts?limit=50 200 in 8ms (compile: 2ms, render: 6ms)
+⨯ TypeError: Do not know how to serialize a BigInt
+    at JSON.stringify (<anonymous>)
+    at GET (src/app/api/switches/[id]/route.ts:13:23)
+  11 |   });
+  12 |   if (!sw) return NextResponse.json({ error: "Not found" }, { status: 404 });
+> 13 |   return NextResponse.json(sw);
+     |                       ^
+  14 | }
+  15 |
+  16 | export async function PUT(req: NextRequest, { params }: RouteParams) {
+ GET /api/switches/cmw1hbdvt000bsr1y4e9oqh7l 500 in 159ms (compile: 25ms, render: 134ms)
+⨯ TypeError: Do not know how to serialize a BigInt
+    at JSON.stringify (<anonymous>)
+    at GET (src/app/api/switches/[id]/route.ts:13:23)
+  11 |   });
+  12 |   if (!sw) return NextResponse.json({ error: "Not found" }, { status: 404 });
+> 13 |   return NextResponse.json(sw);
+     |                       ^
+  14 | }
+  15 |
+  16 | export async function PUT(req: NextRequest, { params }: RouteParams) {
+ GET /api/switches/cmw1hbdvt000bsr1y4e9oqh7l 500 in 191ms (compile: 23ms, render: 167ms)
