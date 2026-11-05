@@ -1150,6 +1150,21 @@ function RingDiagram(props: {
       </div>
       <div className="overflow-x-auto">
         <svg width={W} height={H} className="block max-w-full" style={{ minWidth: layout === "linear" ? W : "100%" }}>
+          <defs>
+            {/* Arrow markers for data flow direction */}
+            <marker id={`arrow-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.78 0.16 195)" />
+            </marker>
+            <marker id={`arrow-warn-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.80 0.17 80)" />
+            </marker>
+            <marker id={`arrow-crit-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.65 0.22 25)" />
+            </marker>
+            <marker id={`arrow-close-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.78 0.16 195)" opacity="0.7" />
+            </marker>
+          </defs>
           {/* Links */}
           {ringLinkPairs.map(({ from, to, link }, i) => {
             const fromIdx = nodes.indexOf(from);
@@ -1158,14 +1173,25 @@ function RingDiagram(props: {
             const p2 = nodePos(toIdx, nodes.length);
             const color = link?.health === "critical" ? "oklch(0.65 0.22 25)" : link?.health === "warning" ? "oklch(0.80 0.17 80)" : "oklch(0.78 0.16 195)";
             const strokeWidth = link ? (link.utilization > 60 ? 3.5 : link.utilization > 20 ? 2.5 : 1.8) : 1.5;
+            // Arrow marker based on link health
+            const markerId = link?.health === "critical" ? `arrow-crit-${ring.id}` : link?.health === "warning" ? `arrow-warn-${ring.id}` : `arrow-${ring.id}`;
+            // Offset the line endpoints so arrows don't overlap nodes
+            const dx = p2.x - p1.x, dy = p2.y - p1.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const offset = 30;
+            const sx = p1.x + (dx / dist) * offset;
+            const sy = p1.y + (dy / dist) * offset;
+            const ex = p2.x - (dx / dist) * offset;
+            const ey = p2.y - (dy / dist) * offset;
             return (
               <g key={i}>
                 <line
-                  x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                  x1={sx} y1={sy} x2={ex} y2={ey}
                   stroke={color}
                   strokeWidth={strokeWidth}
                   strokeOpacity={0.85}
                   strokeLinecap="round"
+                  markerEnd={`url(#${markerId})`}
                   className="cursor-pointer transition-all"
                   onMouseEnter={(e) => link && onLinkHover(link, e)}
                   onMouseMove={(e) => link && onLinkHover(link, e)}
@@ -1198,11 +1224,20 @@ function RingDiagram(props: {
             const p1 = nodePos(nodes.length - 1, nodes.length);
             const p2 = nodePos(0, nodes.length);
             const color = closingLink.health === "critical" ? "oklch(0.65 0.22 25)" : closingLink.health === "warning" ? "oklch(0.80 0.17 80)" : "oklch(0.78 0.16 195)";
+            // Offset for closing link arrow
+            const dx = p2.x - p1.x, dy = p2.y - p1.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const offset = 30;
+            const sx = p1.x + (dx / dist) * offset;
+            const sy = p1.y + (dy / dist) * offset;
+            const ex = p2.x - (dx / dist) * offset;
+            const ey = p2.y - (dy / dist) * offset;
             return (
               <line
-                x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                x1={sx} y1={sy} x2={ex} y2={ey}
                 stroke={color} strokeWidth={2.5} strokeOpacity={0.7} strokeLinecap="round"
                 strokeDasharray="6 4"
+                markerEnd={`url(#arrow-close-${ring.id})`}
                 className="cursor-pointer"
                 onMouseEnter={(e) => onLinkHover(closingLink, e)}
                 onMouseMove={(e) => onLinkHover(closingLink, e)}
