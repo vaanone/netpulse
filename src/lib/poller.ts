@@ -107,42 +107,10 @@ export async function runPollCycle(): Promise<Snapshot> {
       let ringPortAutoDetected = false;
       let suggestedNextSwitchId: string | null = null, suggestedNextSwitchName: string | null = null, suggestedNextSwitchReason: string | null = null;
 
-      // In simulation mode, inject CDP neighbors ONLY for directly connected
-      // switches. CDP shows only 1-hop neighbors — not switches 2+ hops away.
-      // A switch is "directly connected" if:
-      //   - This switch's nextSwitchId points to it (next hop in ring)
-      //   - Its nextSwitchId points to this switch (previous hop in ring)
-      // This prevents the auto-detect from suggesting a switch that's 2+ hops away.
-      if (poll.mode === "simulate") {
-        // Find directly connected switches (1-hop neighbors in the ring)
-        const directlyConnected: typeof switches = [];
-        // Next switch (forward direction)
-        if (sw.nextSwitchId) {
-          const next = switchById.get(sw.nextSwitchId);
-          if (next) directlyConnected.push(next);
-        }
-        // Previous switch (the switch that points to this one)
-        const prev = switches.find(s => s.nextSwitchId === sw.id);
-        if (prev) directlyConnected.push(prev);
-
-        for (const otherSw of directlyConnected) {
-          const alreadyHas = neighborSnap.some(n => n.matchedSwitchId === otherSw.id);
-          if (!alreadyHas) {
-            const portIdx = neighborSnap.length;
-            if (portIdx >= 6) break;
-            const ifIndex = 101 + portIdx;
-            const ifName = ifNameByIfIndex.get(ifIndex) ?? `Te1/0/${portIdx + 1}`;
-            neighborSnap.push({
-              localIfIndex: ifIndex, localIfName: ifName,
-              deviceId: otherSw.name, devicePort: "Te1/0/1",
-              address: otherSw.ipAddress,
-              platform: "Cisco IOS Software, Catalyst L3 Switch Software (SIMULATED)",
-              protocol: "cdp" as const,
-              matchedSwitchId: otherSw.id, matchedSwitchName: otherSw.name, matchedSwitchIp: otherSw.ipAddress,
-            });
-          }
-        }
-      }
+      // NOTE: When the switch is unreachable (mode === "simulate"), we do NOT
+      // invent CDP/LLDP neighbors anymore. Only real neighbors reported by the
+      // switch via SNMP are shown. Auto-detection of the ring port will only
+      // succeed once SNMP actually connects.
       if (sw.nextSwitchId) {
         const matchedToNext = neighborSnap.find((n) => n.matchedSwitchId === sw.nextSwitchId);
         if (matchedToNext) { ringPortIfIndex = matchedToNext.localIfIndex; ringPortAutoDetected = true; }
@@ -228,7 +196,7 @@ export async function runPollCycle(): Promise<Snapshot> {
         switchId: sw.id, name: sw.name, ipAddress: sw.ipAddress, location: sw.location, snmpVersion: sw.snmpVersion,
         ringId: sw.ring?.id ?? null, ringName: sw.ring?.name ?? sw.ring?.label ?? null, ringLabel: sw.ring?.label ?? null,
         companyName: sw.ring?.company?.name ?? null, nextSwitchId: sw.nextSwitchId ?? null, nextSwitchName: remoteSwitch?.name ?? null,
-        prevSwitchId: prevSwitchOf(sw.id)?.id ?? null, prevSwitchName: prevSwitchOf(sw.id)?.name ?? null, status: poll.reachable || poll.mode === "simulate" ? "up" : "unreachable",
+        prevSwitchId: prevSwitchOf(sw.id)?.id ?? null, prevSwitchName: prevSwitchOf(sw.id)?.name ?? null, status: poll.reachable ? "up" : "unreachable",
         mode: poll.mode, error: poll.error, sysName: poll.sysName, sysDescr: poll.sysDescr, uptimeSeconds: poll.uptimeSeconds,
         cpuUsage: poll.cpuUsage, memoryUsed: poll.memoryUsed, memoryFree: poll.memoryFree, memoryTotal, memoryUsage,
         power: poll.power ?? null,

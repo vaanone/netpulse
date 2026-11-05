@@ -5,6 +5,6 @@ $ next dev -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 630ms
- POST /api/poll 200 in 12.3s (compile: 194ms, render: 12.1s)
- GET /api/metrics 200 in 39ms (compile: 33ms, render: 6ms)
+✓ Ready in 603ms
+ POST /api/poll 200 in 12.3s (compile: 214ms, render: 12.1s)
+ GET /api/metrics 200 in 39ms (compile: 32ms, render: 6ms)

@@ -158,13 +158,9 @@ function securityLevelFromString(s: string | null | undefined): net_snmp.Securit
 }
 
 function createSession(row: SwitchRow): net_snmp.Session {
-  const options: net_snmp.SessionOptions = {
-    port: row.snmpPort,
-    retries: 0,
-    timeout: 1500,
-    version: row.snmpVersion === 1 ? net_snmp.Version1 : net_snmp.Version2c,
-  };
   if (row.snmpVersion === 3) {
+    // SNMPv3 — do NOT set `version` in options, otherwise net-snmp throws:
+    //   "SNMPv3 session requested but version '1' specified in options"
     const user: net_snmp.User = {
       name: row.v3Username ?? "",
       level: securityLevelFromString(row.v3SecurityLevel),
@@ -177,8 +173,18 @@ function createSession(row: SwitchRow): net_snmp.Session {
       user.privProtocol = row.v3PrivProtocol.toUpperCase() === "AES" ? net_snmp.PrivProtocols.aes : net_snmp.PrivProtocols.des;
       user.privKey = row.v3PrivPassword ?? "";
     }
-    return net_snmp.createV3Session(row.ipAddress, user, options);
+    const v3Options: net_snmp.SessionOptions = {
+      port: row.snmpPort, retries: 0, timeout: 1500,
+    };
+    return net_snmp.createV3Session(row.ipAddress, user, v3Options);
   }
+  // SNMPv1 / v2c
+  const options: net_snmp.SessionOptions = {
+    port: row.snmpPort,
+    retries: 0,
+    timeout: 1500,
+    version: row.snmpVersion === 1 ? net_snmp.Version1 : net_snmp.Version2c,
+  };
   return net_snmp.createSession(row.ipAddress, row.community ?? "public", options);
 }
 
@@ -384,187 +390,28 @@ function decodeCdpAddress(vb: net_snmp.Varbind): string | null {
 }
 
 // ─── Simulation fallback ──────────────────────────────────────────────────
-const SIM_SEED = new Map<string, number>();
-function seedFor(ip: string): number {
-  if (!SIM_SEED.has(ip)) { let h = 0; for (let i = 0; i < ip.length; i++) h = (h * 31 + ip.charCodeAt(i)) >>> 0; SIM_SEED.set(ip, h); }
-  return SIM_SEED.get(ip)!;
-}
-function rng(seed: number, salt: number): () => number {
-  let s = (seed ^ salt) >>> 0;
-  return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-}
-const IF_NAMES_SFP = ["Te1/0/1", "Te1/0/2", "Gi1/0/1", "Gi1/0/2", "Gi2/0/1", "Gi2/0/2"];
-const IF_NAMES_ACCESS = ["Gi1/0/3", "Gi1/0/4", "Gi1/0/5", "Gi1/0/6", "Gi1/0/7", "Gi1/0/8", "Gi1/0/9", "Gi1/0/10"];
-const IF_DESCR_SFP = ["TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2", "GigabitEthernet1/0/1", "GigabitEthernet1/0/2", "GigabitEthernet2/0/1", "GigabitEthernet2/0/2"];
-const IF_DESCR_ACCESS = ["GigabitEthernet1/0/3", "GigabitEthernet1/0/4", "GigabitEthernet1/0/5", "GigabitEthernet1/0/6", "GigabitEthernet1/0/7", "GigabitEthernet1/0/8", "GigabitEthernet1/0/9", "GigabitEthernet1/0/10"];
-const IF_ALIAS_SFP = ["Ring uplink to next switch", "Ring downlink to prev switch", "Uplink to core", "Uplink to distribution", "Inter-switch link A", "Inter-switch link B"];
-const IF_ALIAS_ACCESS = ["Access port - Floor 1", "Access port - Floor 2", "Access port - Floor 3", "Access port - Server room", "Access port - AP Controller", "Access port - Voice VLAN", "Access port - Guest VLAN", "Access port - Management"];
-
+// When the switch is unreachable from the server, NO fake data is returned.
+// All values are null/empty — the UI displays "—" / 0 / empty rows for them.
+// This ensures that what you see in the dashboard is always real SNMP data
+// polled from the actual device, never invented numbers.
 export function simulateSwitch(row: SwitchRow, errMsg: string): PollResult {
-  const seed = seedFor(row.ipAddress);
-  const r = rng(seed, Math.floor(Date.now() / 10000));
-  const r2 = rng(seed, 7);
-  const interfaces: any[] = [];
-  let counter = 1000000n + BigInt(Math.floor(r2() * 5_000_000));
-
-  // ─── SFP/Fiber ports (ports 101-106) ───
-  // Port 101 (Te1/0/1) = Ring port → always UP (connected to next switch)
-  // Port 102 (Te1/0/2) = Ring port → always UP (connected to prev switch) 
-  // Port 103 (Gi1/0/1) = Uplink → UP if SFP inserted, DOWN if no SFP
-  // Port 104 (Gi1/0/2) = Uplink → random UP/DOWN
-  // Port 105 (Gi2/0/1) = Inter-switch → random UP/DOWN
-  // Port 106 (Gi2/0/2) = Inter-switch → random UP/DOWN
-  for (let i = 0; i < IF_NAMES_SFP.length; i++) {
-    const ifIndex = 101 + i;
-    const isTenGig = IF_NAMES_SFP[i].startsWith("Te");
-    const speed = isTenGig ? 10000000000n : 1000000000n;
-    const highSpeed = isTenGig ? 10000 : 1000;
-    const inOctets = counter + BigInt(Math.floor(r() * 500_000_000));
-    const outOctets = counter + BigInt(Math.floor(r2() * 350_000_000));
-    counter = inOctets;
-    // First 2 ports (ring ports) are always UP. Others are random.
-    const isRingPort = i < 2;
-    const operStatus = isRingPort ? 1 : (r() > 0.25 ? 1 : 2);
-    const adminStatus = isRingPort ? 1 : (r() > 0.1 ? 1 : 2);
-    // Only generate traffic counters for UP ports
-    const hasTraffic = operStatus === 1;
-    interfaces.push({
-      ifIndex,
-      ifName: IF_NAMES_SFP[i],
-      ifDescr: IF_DESCR_SFP[i],
-      ifAlias: IF_ALIAS_SFP[i],
-      ifSpeed: speed,
-      ifHighSpeed: highSpeed,
-      ifOperStatus: operStatus,
-      ifAdminStatus: adminStatus,
-      ifInOctets: hasTraffic ? inOctets : null,
-      ifOutOctets: hasTraffic ? outOctets : null,
-      ifHCInOctets: hasTraffic ? inOctets : null,
-      ifHCOutOctets: hasTraffic ? outOctets : null,
-      ifInErrors: hasTraffic ? BigInt(Math.floor(r() * 3)) : BigInt(0),
-      ifOutErrors: hasTraffic ? BigInt(Math.floor(r2() * 1)) : BigInt(0),
-      ifInDiscards: BigInt(0),
-      ifOutDiscards: BigInt(0),
-      ifInUcastPkts: hasTraffic ? inOctets / 1000n : null,
-      ifOutUcastPkts: hasTraffic ? outOctets / 1000n : null,
-    });
-  }
-
-  // ─── Access/Copper ports (ports 201-208) ───
-  // Some UP (connected devices), some DOWN (empty ports)
-  for (let i = 0; i < IF_NAMES_ACCESS.length; i++) {
-    const ifIndex = 201 + i;
-    const operStatus = r() > 0.35 ? 1 : 2;  // ~65% UP, ~35% DOWN
-    const adminStatus = r() > 0.05 ? 1 : 2;  // ~95% enabled
-    interfaces.push({
-      ifIndex,
-      ifName: IF_NAMES_ACCESS[i],
-      ifDescr: IF_DESCR_ACCESS[i],
-      ifAlias: IF_ALIAS_ACCESS[i],
-      ifSpeed: 1000000000n,
-      ifHighSpeed: 1000,
-      ifOperStatus: operStatus,
-      ifAdminStatus: adminStatus,
-      ifInOctets: null,
-      ifOutOctets: null,
-      ifHCInOctets: null,
-      ifHCOutOctets: null,
-      ifInErrors: BigInt(0),
-      ifOutErrors: BigInt(0),
-      ifInDiscards: BigInt(0),
-      ifOutDiscards: BigInt(0),
-      ifInUcastPkts: null,
-      ifOutUcastPkts: null,
-    });
-  }
-
-  // ─── DOM readings — only for UP SFP ports ───
-  // DOWN ports don't have SFP transceivers inserted, so no DOM data
-  const domReadings: Record<number, any> = {};
-  for (let i = 0; i < IF_NAMES_SFP.length; i++) {
-    const iface = interfaces[i];
-    if (iface.ifOperStatus !== 1) continue; // Skip DOWN ports
-    const isTenGig = IF_NAMES_SFP[i].startsWith("Te");
-    if (isTenGig) {
-      // 10G SFP+: Tx -1 to -7 dBm, Rx -3 to -9 dBm
-      domReadings[101 + i] = {
-        txPower: -1 + r() * 6,    // -1 to -7 dBm
-        rxPower: -3 + r() * 6,    // -3 to -9 dBm
-        temperature: 35 + r() * 15, // 35-50 C
-        voltage: 3.25 + r() * 0.15, // 3.25-3.40 V
-        biasCurrent: 7 + r() * 5,   // 7-12 mA
-      };
-    } else {
-      // 1G SFP: Tx -3 to -9 dBm, Rx -5 to -12 dBm
-      domReadings[101 + i] = {
-        txPower: -3 + r() * 6,    // -3 to -9 dBm
-        rxPower: -5 + r() * 7,    // -5 to -12 dBm
-        temperature: 38 + r() * 12, // 38-50 C
-        voltage: 3.25 + r() * 0.15,
-        biasCurrent: 5 + r() * 4,   // 5-9 mA
-      };
-    }
-  }
-  // Thresholds — realistic 10G-SR and 1G-LX values
-  const thresholds: Record<number, any> = {};
-  for (let i = 0; i < IF_NAMES_SFP.length; i++) {
-    const isTenGig = IF_NAMES_SFP[i].startsWith("Te");
-    if (isTenGig) {
-      thresholds[101 + i] = { txWarnLow: -8.0, txWarnHigh: 2.0, txAlarmLow: -10.0, txAlarmHigh: 3.0, rxWarnLow: -11.0, rxWarnHigh: 1.0, rxAlarmLow: -13.0, rxAlarmHigh: 2.0 };
-    } else {
-      thresholds[101 + i] = { txWarnLow: -9.5, txWarnHigh: 0.5, txAlarmLow: -12.0, txAlarmHigh: 1.5, rxWarnLow: -13.0, rxWarnHigh: -1.0, rxAlarmLow: -15.0, rxAlarmHigh: 0.5 };
-    }
-  }
-  // CDP neighbors — generate realistic neighbors that match configured switches.
-  // We generate neighbors pointing at IPs near the switch's IP so the poller
-  // can match them against other configured switches in the same subnet.
-  const neighbors: CdpNeighbor[] = [];
-  // First SFP port = ring port → neighbor is the next switch in the ring
-  // Generate a neighbor on the first SFP port pointing to a nearby IP
-  const ipParts = row.ipAddress.split(".").map(Number);
-  if (ipParts.length === 4) {
-    const prefix = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
-    const myLastOctet = ipParts[3];
-    // Neighbor on port 1 (ring port): next IP in sequence
-    const nextOctet = (myLastOctet % 254) + 1;
-    neighbors.push({
-      localIfIndex: 101,
-      deviceId: row.name.replace(/-\d+$/, "").replace(/-/g, "") + "-next",
-      devicePort: "Te1/0/1",
-      address: `${prefix}.${nextOctet}`,
-      platform: "Cisco IOS Software, Catalyst L3 Switch Software (CAT3K_CAA-UNIVERSALK9-M)",
-      protocol: "cdp" as const,
-    });
-    // Note: We only generate a "next" CDP neighbor (port 1).
-    // The "prev" neighbor is determined by the poller based on which
-    // configured switches point to this switch via nextSwitchId.
-    // We don't generate a fake "prev" based on IP-1 because that
-    // IP often doesn't match any configured switch.
-  }
-  // Simulated power supply data — most Catalyst switches have 1 or 2 PSUs.
-  // Most are healthy (status=on); occasional demo variance.
-  const psuCount = r() > 0.6 ? 2 : 1;
-  const powerSupplies = Array.from({ length: psuCount }, (_, i) => {
-    const statusNum = i === 0 ? 1 : (r() > 0.85 ? 3 : 1);  // first PSU always ON; second occasionally failed
-    return {
-      index: 1000 + i,
-      status: statusNum,
-      statusText: PSU_STATUS_TEXT[statusNum] ?? "unknown" as PowerSupply["statusText"],
-      type: i === 0 ? "AC" : (r() > 0.5 ? "AC" : "AC-Redundant"),
-    } as PowerSupply;
-  });
-  // Simulated PoE total — between 0 and 400W depending on switch load
-  const totalPoeMilliWatts = Math.floor(r() * 400_000);
-
   return {
-    reachable: false, mode: "simulate", error: errMsg,
-    sysDescr: "Cisco IOS Software [Simulated] - NETPULSE demo mode", sysName: row.name,
-    uptimeSeconds: Math.floor(r() * 60 * 86400), cpuUsage: 5 + r() * 30,
-    memoryUsed: Math.floor(0.3 * 1073741824 + r() * 0.4 * 1073741824),
-    memoryFree: Math.floor(0.2 * 1073741824 + r2() * 0.3 * 1073741824),
-    power: { powerSupplies, totalPoeMilliWatts, totalPoeWatts: totalPoeMilliWatts / 1000 },
-    interfaces, domReadings, thresholds,
-    transceivers: IF_NAMES_SFP.map((n, i) => ({ entityIndex: 1000 + i, name: n, descr: "SFP-10G-SR", modelName: "SFP-10G-SR", serialNum: `SIM${(seed + i).toString(16).toUpperCase().padStart(8, "0")}`, parentEntityIndex: 0, ifIndex: 101 + i })),
-    neighbors, ringPortIfIndex: null, polledAt: new Date(),
+    reachable: false,
+    mode: "simulate",
+    error: errMsg,
+    sysDescr: null,
+    sysName: null,
+    uptimeSeconds: null,
+    cpuUsage: null,
+    memoryUsed: null,
+    memoryFree: null,
+    power: null,
+    interfaces: [],
+    domReadings: {},
+    thresholds: {},
+    transceivers: [],
+    neighbors: [],
+    ringPortIfIndex: null,
+    polledAt: new Date(),
   };
 }
