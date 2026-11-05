@@ -38,6 +38,12 @@ export const OID = {
   cpmCPUTotal1minRev: "1.3.6.1.4.1.9.9.109.1.1.1.1.7",   // older IOS fallback
   cpmCPUTotal5secRev: "1.3.6.1.4.1.9.9.109.1.1.1.1.6",   // even older fallback
   cpmCPUTotal5sec:    "1.3.6.1.4.1.9.9.109.1.1.1.1.3",   // legacy (pre-Restricted)
+  // Cisco SMB MIBs — used by Catalyst 1000/1300/1400 series, SMB SG/SE series.
+  // These don't support CISCO-PROCESS-MIB; they use the legacy "rl" (Linksys) MIBs.
+  rlCpuUsage:         "1.3.6.1.4.1.9.6.1.101.7.0",        // 5-min CPU average (0-100)
+  rlCpuUsage1min:     "1.3.6.1.4.1.9.6.1.101.10.0",       // 1-min CPU average
+  rlMemoryPoolTotal:  "1.3.6.1.4.1.9.6.1.101.21.1.0",     // total memory in bytes
+  rlMemoryPoolFree:   "1.3.6.1.4.1.9.6.1.101.21.2.0",     // free memory in bytes
   ciscoMemoryPoolUsed: "1.3.6.1.4.1.9.9.48.1.1.1.5",
   ciscoMemoryPoolFree: "1.3.6.1.4.1.9.9.48.1.1.1.6",
   // Power supply status (CISCO-ENTITY-FRU-CONTROL-MIB)
@@ -287,18 +293,37 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
     const up = asNumber(sysVars[2]);
     if (up !== null) result.uptimeSeconds = Math.floor(up / 100);
   } catch {}
-  // CPU usage — try 5min, fall back to 1min, then 5sec. Different Cisco IOS
-  // versions expose different OIDs. Older IOS (12.2) only has cpmCPUTotal5sec.
+  // CPU usage — try 5min, fall back to 1min, then 5sec.
+  // Different Cisco IOS versions expose different OIDs. Older IOS (12.2) only has cpmCPUTotal5sec.
+  // For SMB switches (Catalyst 1000/1300/1400, SG/SE series), CISCO-PROCESS-MIB is NOT supported;
+  // they use the rlCpuUsage OID from the legacy Linksys/SMB MIB tree (1.3.6.1.4.1.9.6.1.101.x).
   try {
     let cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5minRev);
     if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal1minRev);
     if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5secRev);
     if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5sec);
-    if (cpuVars.length > 0) { const v = asNumber(cpuVars[0]); if (v !== null) result.cpuUsage = v; }
+    if (cpuVars.length > 0) {
+      const v = asNumber(cpuVars[0]);
+      if (v !== null) result.cpuUsage = v;
+    }
+    // SMB fallback (Catalyst 1300/1000/SG/SE) — these are scalar OIDs (.0 suffix), use GET not SUBTREE
+    if (result.cpuUsage == null) {
+      try {
+        const smbCpu = await snmpGet(session, [OID.rlCpuUsage]);
+        const v = asNumber(smbCpu[0]);
+        if (v !== null && v >= 0 && v <= 100) result.cpuUsage = v;
+      } catch {}
+    }
+    if (result.cpuUsage == null) {
+      try {
+        const smbCpu = await snmpGet(session, [OID.rlCpuUsage1min]);
+        const v = asNumber(smbCpu[0]);
+        if (v !== null && v >= 0 && v <= 100) result.cpuUsage = v;
+      } catch {}
+    }
   } catch (e: any) { console.warn("[snmp] CPU poll failed:", e?.message); }
-  // Memory — ciscoMemoryPoolUsed/Free (CISCO-MEMORY-POOL-MIB).
-  // Some IOS-XE devices also expose cpmCPUMemoryUsed (1.3.6.1.4.1.9.9.109.1.1.1.1.12)
-  // but the pool OIDs work on essentially every Catalyst.
+  // Memory — ciscoMemoryPoolUsed/Free (CISCO-MEMORY-POOL-MIB) for classic IOS.
+  // For SMB switches (Catalyst 1000/1300/1400, SG/SE) — falls back to rlMemoryPoolTotal/Free.
   try {
     const [usedVars, freeVars] = await Promise.all([
       snmpSubtree(session, OID.ciscoMemoryPoolUsed),
@@ -309,6 +334,18 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
     for (const vb of freeVars) { const v = asNumber(vb); if (v !== null) memFree += v; }
     if (memUsed > 0 || memFree > 0) {
       result.memoryUsed = memUsed; result.memoryFree = memFree;
+    }
+    // SMB fallback (Catalyst 1300/1000/SG/SE) — scalar OIDs
+    if (result.memoryUsed == null) {
+      try {
+        const [totalV, freeV] = await snmpGet(session, [OID.rlMemoryPoolTotal, OID.rlMemoryPoolFree]);
+        const total = asNumber(totalV);
+        const free = asNumber(freeV);
+        if (total != null && free != null && total > 0) {
+          result.memoryUsed = total - free;
+          result.memoryFree = free;
+        }
+      } catch {}
     }
   } catch (e: any) { console.warn("[snmp] Memory poll failed:", e?.message); }
   // Interfaces — use Promise.allSettled so a single failed OID (e.g. ifHCInOctets
