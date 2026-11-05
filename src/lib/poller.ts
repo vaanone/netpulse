@@ -111,13 +111,25 @@ export async function runPollCycle(): Promise<Snapshot> {
         const matchedToNext = neighborSnap.find((n) => n.matchedSwitchId === sw.nextSwitchId);
         if (matchedToNext) { ringPortIfIndex = matchedToNext.localIfIndex; ringPortAutoDetected = true; }
       } else {
-        const firstMatched = neighborSnap.find((n) => n.matchedSwitchId !== null);
-        if (firstMatched && firstMatched.matchedSwitchId) {
-          suggestedNextSwitchId = firstMatched.matchedSwitchId;
-          const sug = switchById.get(firstMatched.matchedSwitchId);
-          suggestedNextSwitchName = sug?.name ?? null;
-          suggestedNextSwitchReason = `CDP neighbor on port ${firstMatched.localIfName ?? firstMatched.localIfIndex} (${firstMatched.deviceId}) matches configured switch "${sug?.name ?? "?"}" at ${firstMatched.matchedSwitchIp}`;
-          ringPortIfIndex = firstMatched.localIfIndex; ringPortAutoDetected = true;
+        // No next switch configured — auto-suggest one from matched CDP neighbors.
+        // Find ALL matched neighbors and pick the best one (prefer same-ring matches,
+        // then any matched switch). Also show all detected neighbors in the UI.
+        const allMatched = neighborSnap.filter((n) => n.matchedSwitchId !== null);
+        if (allMatched.length > 0) {
+          // Prefer a switch in the same ring
+          const sameRingMatch = allMatched.find((n) => {
+            const matchedSw = switchById.get(n.matchedSwitchId!);
+            return matchedSw && matchedSw.ringId === sw.ringId;
+          });
+          const best = sameRingMatch ?? allMatched[0];
+          if (best && best.matchedSwitchId) {
+            suggestedNextSwitchId = best.matchedSwitchId;
+            const sug = switchById.get(best.matchedSwitchId);
+            suggestedNextSwitchName = sug?.name ?? null;
+            suggestedNextSwitchReason = `CDP/LLDP neighbor on port ${best.localIfName ?? best.localIfIndex} (${best.deviceId}) matches configured switch "${sug?.name ?? "?"}" at ${best.matchedSwitchIp}`;
+            ringPortIfIndex = best.localIfIndex;
+            ringPortAutoDetected = true;
+          }
         }
       }
 

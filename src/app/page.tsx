@@ -3016,14 +3016,43 @@ function SwitchDetailDialog(props: {
               {sw.suggestedNextSwitchId && !sw.nextSwitchId && (
                 <div className="rounded-md border border-warn/30 bg-warn/5 p-2 text-xs">
                   <div className="flex items-center gap-1.5 text-warn font-medium mb-0.5">
-                    <CircleAlert className="size-3.5" /> Suggested next switch
+                    <CircleAlert className="size-3.5" /> Auto-detected nearby switch
                   </div>
                   <div className="text-muted-foreground">{sw.suggestedNextSwitchReason}</div>
-                  {sw.suggestedNextSwitchName && (
-                    <button onClick={() => onSwitchClick(sw.suggestedNextSwitchId!)} className="mt-1 text-primary hover:underline">
+                  <div className="flex items-center gap-2 mt-2">
+                    <button onClick={() => onSwitchClick(sw.suggestedNextSwitchId!)} className="text-primary hover:underline">
                       → {sw.suggestedNextSwitchName}
                     </button>
-                  )}
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={async () => {
+                        try {
+                          const r = await fetch(`/api/switches/${sw.switchId}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              name: sw.name,
+                              ipAddress: sw.ipAddress,
+                              location: sw.location,
+                              snmpVersion: sw.snmpVersion,
+                              ringId: sw.ringId,
+                              nextSwitchId: sw.suggestedNextSwitchId,
+                            }),
+                          });
+                          if (!r.ok) throw new Error("Failed to auto-close ring");
+                          toast.success(`Ring closed: ${sw.name} → ${sw.suggestedNextSwitchName}`);
+                          queryClient.invalidateQueries({ queryKey: ["switches"] });
+                          queryClient.invalidateQueries({ queryKey: ["metrics"] });
+                        } catch (e: any) {
+                          toast.error(e.message);
+                        }
+                      }}
+                    >
+                      <Workflow className="size-3" />
+                      Auto-Close Ring
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
