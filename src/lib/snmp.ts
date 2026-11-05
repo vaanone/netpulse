@@ -307,8 +307,10 @@ function rng(seed: number, salt: number): () => number {
   let s = (seed ^ salt) >>> 0;
   return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-const IF_NAMES_SFP = ["Gi1/0/1", "Gi1/0/2", "Te1/0/1", "Te1/1/1", "Gi2/0/1", "Gi2/0/2"];
+const IF_NAMES_SFP = ["Te1/0/1", "Te1/0/2", "Gi1/0/1", "Gi1/0/2", "Gi2/0/1", "Gi2/0/2"];
 const IF_NAMES_ACCESS = ["Gi1/0/3", "Gi1/0/4", "Gi1/0/5", "Gi1/0/6", "Gi1/0/7", "Gi1/0/8", "Gi1/0/9", "Gi1/0/10"];
+const IF_DESCR_SFP = ["TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2", "GigabitEthernet1/0/1", "GigabitEthernet1/0/2", "GigabitEthernet2/0/1", "GigabitEthernet2/0/2"];
+const IF_DESCR_ACCESS = ["GigabitEthernet1/0/3", "GigabitEthernet1/0/4", "GigabitEthernet1/0/5", "GigabitEthernet1/0/6", "GigabitEthernet1/0/7", "GigabitEthernet1/0/8", "GigabitEthernet1/0/9", "GigabitEthernet1/0/10"];
 
 export function simulateSwitch(row: SwitchRow, errMsg: string): PollResult {
   const seed = seedFor(row.ipAddress);
@@ -318,52 +320,98 @@ export function simulateSwitch(row: SwitchRow, errMsg: string): PollResult {
   let counter = 1000000n + BigInt(Math.floor(r2() * 5_000_000));
   for (let i = 0; i < IF_NAMES_SFP.length; i++) {
     const ifIndex = 101 + i;
-    const speed = 10000000000n;
+    const isTenGig = IF_NAMES_SFP[i].startsWith("Te");
+    const speed = isTenGig ? 10000000000n : 1000000000n;
+    const highSpeed = isTenGig ? 10000 : 1000;
     const inOctets = counter + BigInt(Math.floor(r() * 500_000_000));
     const outOctets = counter + BigInt(Math.floor(r2() * 350_000_000));
     counter = inOctets;
     interfaces.push({
-      ifIndex, ifName: IF_NAMES_SFP[i], ifDescr: `TenGigabitEthernet1/0/${i + 1}`, ifAlias: `SFP+ port ${i + 1}`,
-      ifSpeed: speed, ifHighSpeed: 10000, ifOperStatus: 1, ifAdminStatus: 1,
+      ifIndex, ifName: IF_NAMES_SFP[i], ifDescr: IF_DESCR_SFP[i], ifAlias: `SFP+ port ${i + 1}`,
+      ifSpeed: speed, ifHighSpeed: highSpeed, ifOperStatus: 1, ifAdminStatus: 1,
       ifInOctets: inOctets, ifOutOctets: outOctets, ifHCInOctets: inOctets, ifHCOutOctets: outOctets,
-      ifInErrors: BigInt(Math.floor(r() * 5)), ifOutErrors: BigInt(Math.floor(r2() * 2)),
+      ifInErrors: BigInt(Math.floor(r() * 3)), ifOutErrors: BigInt(Math.floor(r2() * 1)),
       ifInDiscards: BigInt(0), ifOutDiscards: BigInt(0), ifInUcastPkts: inOctets / 1000n, ifOutUcastPkts: outOctets / 1000n,
     });
   }
   for (let i = 0; i < IF_NAMES_ACCESS.length; i++) {
     interfaces.push({
-      ifIndex: 201 + i, ifName: IF_NAMES_ACCESS[i], ifDescr: `GigabitEthernet1/0/${i + 3}`, ifAlias: `Access ${i}`,
-      ifSpeed: 1000000000n, ifHighSpeed: 1000, ifOperStatus: r() > 0.2 ? 1 : 2, ifAdminStatus: 1,
+      ifIndex: 201 + i, ifName: IF_NAMES_ACCESS[i], ifDescr: IF_DESCR_ACCESS[i], ifAlias: `Access port ${i + 3}`,
+      ifSpeed: 1000000000n, ifHighSpeed: 1000, ifOperStatus: r() > 0.15 ? 1 : 2, ifAdminStatus: 1,
       ifInOctets: null, ifOutOctets: null, ifHCInOctets: null, ifHCOutOctets: null,
       ifInErrors: BigInt(0), ifOutErrors: BigInt(0), ifInDiscards: BigInt(0), ifOutDiscards: BigInt(0),
       ifInUcastPkts: null, ifOutUcastPkts: null,
     });
   }
+  // DOM readings — realistic Cisco SFP-10G-SR and GLC-T values
   const domReadings: Record<number, any> = {};
   for (let i = 0; i < IF_NAMES_SFP.length; i++) {
-    domReadings[101 + i] = { txPower: -3 + r() * 4, rxPower: -10 + r() * 7 + (i === 0 ? -1 : 0), temperature: 32 + r() * 18, voltage: 3.2 + r() * 0.25, biasCurrent: 6 + r() * 6 };
+    const isTenGig = IF_NAMES_SFP[i].startsWith("Te");
+    if (isTenGig) {
+      // 10G SFP+: Tx -1 to -7 dBm, Rx -3 to -9 dBm
+      domReadings[101 + i] = {
+        txPower: -1 + r() * 6,    // -1 to -7 dBm
+        rxPower: -3 + r() * 6,    // -3 to -9 dBm
+        temperature: 35 + r() * 15, // 35-50 C
+        voltage: 3.25 + r() * 0.15, // 3.25-3.40 V
+        biasCurrent: 7 + r() * 5,   // 7-12 mA
+      };
+    } else {
+      // 1G SFP: Tx -3 to -9 dBm, Rx -5 to -12 dBm
+      domReadings[101 + i] = {
+        txPower: -3 + r() * 6,    // -3 to -9 dBm
+        rxPower: -5 + r() * 7,    // -5 to -12 dBm
+        temperature: 38 + r() * 12, // 38-50 C
+        voltage: 3.25 + r() * 0.15,
+        biasCurrent: 5 + r() * 4,   // 5-9 mA
+      };
+    }
   }
+  // Thresholds — realistic 10G-SR and 1G-LX values
   const thresholds: Record<number, any> = {};
-  for (const ifIndex of Object.keys(domReadings).map(Number)) {
-    thresholds[ifIndex] = { txWarnLow: -8.0, txWarnHigh: 2.0, txAlarmLow: -10.0, txAlarmHigh: 3.0, rxWarnLow: -11.0, rxWarnHigh: 1.0, rxAlarmLow: -13.0, rxAlarmHigh: 2.0 };
-  }
-  const neighbors: CdpNeighbor[] = [];
   for (let i = 0; i < IF_NAMES_SFP.length; i++) {
-    const lastOctet = (parseInt(row.ipAddress.split(".")[3] || "1", 10) + i + 1) % 254 + 1;
-    const prefix = row.ipAddress.split(".").slice(0, 3).join(".");
+    const isTenGig = IF_NAMES_SFP[i].startsWith("Te");
+    if (isTenGig) {
+      thresholds[101 + i] = { txWarnLow: -8.0, txWarnHigh: 2.0, txAlarmLow: -10.0, txAlarmHigh: 3.0, rxWarnLow: -11.0, rxWarnHigh: 1.0, rxAlarmLow: -13.0, rxAlarmHigh: 2.0 };
+    } else {
+      thresholds[101 + i] = { txWarnLow: -9.5, txWarnHigh: 0.5, txAlarmLow: -12.0, txAlarmHigh: 1.5, rxWarnLow: -13.0, rxWarnHigh: -1.0, rxAlarmLow: -15.0, rxAlarmHigh: 0.5 };
+    }
+  }
+  // CDP neighbors — generate realistic neighbors that match configured switches.
+  // We generate neighbors pointing at IPs near the switch's IP so the poller
+  // can match them against other configured switches in the same subnet.
+  const neighbors: CdpNeighbor[] = [];
+  // First SFP port = ring port → neighbor is the next switch in the ring
+  // Generate a neighbor on the first SFP port pointing to a nearby IP
+  const ipParts = row.ipAddress.split(".").map(Number);
+  if (ipParts.length === 4) {
+    const prefix = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
+    const myLastOctet = ipParts[3];
+    // Neighbor on port 1 (ring port): next IP in sequence
+    const nextOctet = (myLastOctet % 254) + 1;
     neighbors.push({
-      localIfIndex: 101 + i,
-      deviceId: i === 0 ? `${row.name}-next-hop` : `unknown-switch-${i}`,
-      devicePort: i === 0 ? "Gi1/0/2" : `Te1/0/${i + 1}`,
-      address: `${prefix}.${lastOctet}`,
-      platform: "Cisco IOS Software, Catalyst L3 Switch Software",
+      localIfIndex: 101,
+      deviceId: row.name.replace(/-\d+$/, "").replace(/-/g, "") + "-next",
+      devicePort: "Te1/0/1",
+      address: `${prefix}.${nextOctet}`,
+      platform: "Cisco IOS Software, Catalyst L3 Switch Software (CAT3K_CAA-UNIVERSALK9-M)",
+      protocol: "cdp" as const,
+    });
+    // Neighbor on port 2: previous IP in sequence
+    const prevOctet = myLastOctet > 1 ? myLastOctet - 1 : 254;
+    neighbors.push({
+      localIfIndex: 102,
+      deviceId: row.name.replace(/-\d+$/, "").replace(/-/g, "") + "-prev",
+      devicePort: "Te1/0/2",
+      address: `${prefix}.${prevOctet}`,
+      platform: "Cisco IOS Software, Catalyst L3 Switch Software (CAT3K_CAA-UNIVERSALK9-M)",
       protocol: "cdp" as const,
     });
   }
   return {
     reachable: false, mode: "simulate", error: errMsg,
     sysDescr: "Cisco IOS Software [Simulated] - NETPULSE demo mode", sysName: row.name,
-    uptimeSeconds: Math.floor(r() * 60 * 86400), cpuUsage: 5 + r() * 35,
+    uptimeSeconds: Math.floor(r() * 60 * 86400), cpuUsage: 5 + r() * 30,
     memoryUsed: Math.floor(0.3 * 1073741824 + r() * 0.4 * 1073741824),
     memoryFree: Math.floor(0.2 * 1073741824 + r2() * 0.3 * 1073741824),
     interfaces, domReadings, thresholds,
