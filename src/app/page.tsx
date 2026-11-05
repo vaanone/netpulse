@@ -2781,7 +2781,7 @@ function SwitchFormDialog(props: {
             </div>
           </div>
 
-          {/* Company / Ring */}
+          {/* Company / Ring — auto-assigned based on CDP/LLDP neighbors */}
           <div className="space-y-2">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Company & Branch Ring</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2800,7 +2800,7 @@ function SwitchFormDialog(props: {
                     </Button>
                   </div>
                 ) : (
-                  <Select value={companyId} onValueChange={(v) => { setCompanyId(v); setRingId(""); setNextSwitchId(""); }}>
+                  <Select value={companyId} onValueChange={(v) => { setCompanyId(v); setRingId(""); }}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Select company" /></SelectTrigger>
                     <SelectContent>
                       {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -2827,7 +2827,7 @@ function SwitchFormDialog(props: {
                     </Button>
                   </div>
                 ) : (
-                  <Select value={ringId} onValueChange={(v) => { setRingId(v); setNextSwitchId(""); }} disabled={!companyId}>
+                  <Select value={ringId} onValueChange={(v) => { setRingId(v); }} disabled={!companyId}>
                     <SelectTrigger className="w-full"><SelectValue placeholder={companyId ? "Select ring" : "Select company first"} /></SelectTrigger>
                     <SelectContent>
                       {availableRings.map(r => <SelectItem key={r.id} value={r.id}>{r.label ?? r.name}</SelectItem>)}
@@ -2907,10 +2907,10 @@ function SwitchFormDialog(props: {
             </Tabs>
           </div>
 
-          {/* Next switch */}
+          {/* Auto-Detect Nearby Switches — replaces manual Next Switch selector */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label>Next Switch in Ring</Label>
+              <Label>Nearby Switches (CDP/LLDP)</Label>
               {!editing && (
                 <Button
                   variant="ghost"
@@ -2922,32 +2922,30 @@ function SwitchFormDialog(props: {
                   {detecting ? (
                     <><RefreshCw className="size-3 animate-spin" /> Detecting…</>
                   ) : (
-                    <><Crosshair className="size-3" /> Auto-Detect Nearby</>
+                    <><Crosshair className="size-3" /> Auto-Detect</>
                   )}
                 </Button>
               )}
             </div>
-            <Select value={nextSwitchId} onValueChange={setNextSwitchId} disabled={!ringId}>
-              <SelectTrigger className="w-full"><SelectValue placeholder={ringId ? "Select next switch (optional)" : "Select ring first"} /></SelectTrigger>
-              <SelectContent>
-                {availableNextSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.ipAddress})</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {detectedNeighbors.length > 0 && (
+            {detectedNeighbors.length > 0 ? (
               <div className="rounded-md border border-primary/30 bg-primary/5 p-2 space-y-1">
                 <div className="text-[10px] text-primary font-medium flex items-center gap-1">
-                  <Crosshair className="size-3" /> Detected CDP/LLDP neighbors:
+                  <Crosshair className="size-3" /> Detected {detectedNeighbors.filter(n => n.matchedSwitchId).length} nearby switch(es):
                 </div>
                 {detectedNeighbors.filter(n => n.matchedSwitchId).map(n => (
                   <button
                     key={n.matchedSwitchId}
                     onClick={() => setNextSwitchId(n.matchedSwitchId!)}
-                    className="flex items-center gap-1.5 text-xs hover:text-primary hover:underline w-full text-left"
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs hover:text-primary hover:underline w-full text-left p-1 rounded",
+                      nextSwitchId === n.matchedSwitchId && "bg-primary/10 text-primary"
+                    )}
                   >
                     <ArrowRight className="size-3 text-primary" />
                     <span className="font-medium">{n.matchedSwitchName}</span>
                     <span className="text-muted-foreground font-mono text-[10px]">({n.address ?? n.deviceId})</span>
                     <span className="text-[10px] text-muted-foreground">via {n.protocol.toUpperCase()} on {n.devicePort}</span>
+                    {nextSwitchId === n.matchedSwitchId && <span className="text-[10px] text-primary ml-auto">← selected as next</span>}
                   </button>
                 ))}
                 {detectedNeighbors.filter(n => n.matchedSwitchId).length === 0 && (
@@ -2955,11 +2953,19 @@ function SwitchFormDialog(props: {
                     No matching switches found. Add the neighboring switch to NETPULSE first, then re-detect.
                   </div>
                 )}
+                {detectedNeighbors.filter(n => !n.matchedSwitchId).length > 0 && (
+                  <div className="text-[10px] text-muted-foreground pt-1 border-t border-border/30">
+                    <span className="text-muted-foreground">Unmatched neighbors: </span>
+                    {detectedNeighbors.filter(n => !n.matchedSwitchId).map(n => n.deviceId).join(", ")}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-[10px] text-muted-foreground">
+                Click "Auto-Detect" to scan the switch via SNMP/CDP/LLDP and find nearby switches.
+                The detected switch will be set as the next hop in the ring.
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground">
-              Defines the ring direction. Click "Auto-Detect" to scan the switch via SNMP/CDP/LLDP and find nearby switches.
-            </p>
           </div>
         </div>
 
