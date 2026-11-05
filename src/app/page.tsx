@@ -3202,6 +3202,22 @@ function SwitchDetailDialog(props: {
                   </div>
                 </div>
               )}
+              {!sw.suggestedNextSwitchId && !sw.nextSwitchId && (
+                <div className="rounded-md border border-crit/30 bg-crit/5 p-2 text-xs">
+                  <div className="flex items-center gap-1.5 text-crit font-medium mb-0.5">
+                    <CircleAlert className="size-3.5" /> No nearby switch detected
+                  </div>
+                  <div className="text-muted-foreground">
+                    No directly connected switch found via CDP/LLDP. Ensure:
+                    <ul className="mt-1 ml-4 list-disc space-y-0.5">
+                      <li>The neighboring switch is added to NETPULSE first</li>
+                      <li>Both switches have CDP or LLDP enabled</li>
+                      <li>Both switches are in the same branch ring</li>
+                      <li>The fiber link between them is UP</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
           </DetailCard>
 

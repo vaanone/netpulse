@@ -102,40 +102,29 @@ export async function runPollCycle(): Promise<Snapshot> {
       let ringPortAutoDetected = false;
       let suggestedNextSwitchId: string | null = null, suggestedNextSwitchName: string | null = null, suggestedNextSwitchReason: string | null = null;
 
-      // In simulation mode, inject CDP neighbors matching ALL other configured
-      // switches in the same ring. This makes auto-detect work properly.
+      // In simulation mode, inject CDP neighbors ONLY for directly connected
+      // switches. CDP shows only 1-hop neighbors — not switches 2+ hops away.
+      // A switch is "directly connected" if:
+      //   - This switch's nextSwitchId points to it (next hop in ring)
+      //   - Its nextSwitchId points to this switch (previous hop in ring)
+      // This prevents the auto-detect from suggesting a switch that's 2+ hops away.
       if (poll.mode === "simulate") {
-        // Find other switches in the same ring
-        const sameRingSwitches = switches.filter(s =>
-          s.id !== sw.id && s.ringId === sw.ringId
-        );
-        // For each switch in the same ring, check if a CDP neighbor already matches
-        for (const otherSw of sameRingSwitches) {
-          const alreadyHas = neighborSnap.some(n => n.matchedSwitchId === otherSw.id);
-          if (!alreadyHas) {
-            // Inject a CDP neighbor on the next available SFP port
-            const portIdx = neighborSnap.length;
-            const ifIndex = 101 + portIdx;
-            const ifName = ifNameByIfIndex.get(ifIndex) ?? `Te1/0/${portIdx + 1}`;
-            neighborSnap.push({
-              localIfIndex: ifIndex, localIfName: ifName,
-              deviceId: otherSw.name, devicePort: "Te1/0/1",
-              address: otherSw.ipAddress,
-              platform: "Cisco IOS Software, Catalyst L3 Switch Software (SIMULATED)",
-              protocol: "cdp" as const,
-              matchedSwitchId: otherSw.id, matchedSwitchName: otherSw.name, matchedSwitchIp: otherSw.ipAddress,
-            });
-          }
+        // Find directly connected switches (1-hop neighbors in the ring)
+        const directlyConnected: typeof switches = [];
+        // Next switch (forward direction)
+        if (sw.nextSwitchId) {
+          const next = switchById.get(sw.nextSwitchId);
+          if (next) directlyConnected.push(next);
         }
-        // Also check switches in other rings (for cross-ring detection)
-        const otherRingSwitches = switches.filter(s =>
-          s.id !== sw.id && s.ringId !== sw.ringId
-        );
-        for (const otherSw of otherRingSwitches) {
+        // Previous switch (the switch that points to this one)
+        const prev = switches.find(s => s.nextSwitchId === sw.id);
+        if (prev) directlyConnected.push(prev);
+
+        for (const otherSw of directlyConnected) {
           const alreadyHas = neighborSnap.some(n => n.matchedSwitchId === otherSw.id);
           if (!alreadyHas) {
             const portIdx = neighborSnap.length;
-            if (portIdx >= 6) break; // Max 6 SFP ports
+            if (portIdx >= 6) break;
             const ifIndex = 101 + portIdx;
             const ifName = ifNameByIfIndex.get(ifIndex) ?? `Te1/0/${portIdx + 1}`;
             neighborSnap.push({
@@ -153,25 +142,31 @@ export async function runPollCycle(): Promise<Snapshot> {
         const matchedToNext = neighborSnap.find((n) => n.matchedSwitchId === sw.nextSwitchId);
         if (matchedToNext) { ringPortIfIndex = matchedToNext.localIfIndex; ringPortAutoDetected = true; }
       } else {
-        // No next switch configured — auto-suggest one from matched CDP neighbors.
-        // Find ALL matched neighbors and pick the best one (prefer same-ring matches,
-        // then any matched switch). Also show all detected neighbors in the UI.
-        const allMatched = neighborSnap.filter((n) => n.matchedSwitchId !== null);
-        if (allMatched.length > 0) {
-          // Prefer a switch in the same ring
-          const sameRingMatch = allMatched.find((n) => {
+        // No next switch configured — auto-suggest ONLY from directly connected
+        // CDP/LLDP neighbors. These are switches that see this switch as a neighbor
+        // OR that this switch sees as a neighbor via CDP.
+        // We must NOT suggest a switch that's 2+ hops away.
+        const matchedNeighbors = neighborSnap.filter((n) => n.matchedSwitchId !== null);
+        if (matchedNeighbors.length > 0) {
+          // Only suggest switches in the SAME ring (directly connected)
+          const sameRingMatched = matchedNeighbors.filter((n) => {
             const matchedSw = switchById.get(n.matchedSwitchId!);
             return matchedSw && matchedSw.ringId === sw.ringId;
           });
-          const best = sameRingMatch ?? allMatched[0];
-          if (best && best.matchedSwitchId) {
-            suggestedNextSwitchId = best.matchedSwitchId;
-            const sug = switchById.get(best.matchedSwitchId);
-            suggestedNextSwitchName = sug?.name ?? null;
-            suggestedNextSwitchReason = `CDP/LLDP neighbor on port ${best.localIfName ?? best.localIfIndex} (${best.deviceId}) matches configured switch "${sug?.name ?? "?"}" at ${best.matchedSwitchIp}`;
-            ringPortIfIndex = best.localIfIndex;
-            ringPortAutoDetected = true;
+          if (sameRingMatched.length > 0) {
+            // Pick the first same-ring matched neighbor
+            const best = sameRingMatched[0];
+            if (best && best.matchedSwitchId) {
+              suggestedNextSwitchId = best.matchedSwitchId;
+              const sug = switchById.get(best.matchedSwitchId);
+              suggestedNextSwitchName = sug?.name ?? null;
+              suggestedNextSwitchReason = `CDP/LLDP neighbor on port ${best.localIfName ?? best.localIfIndex} (${best.deviceId}) matches configured switch "${sug?.name ?? "?"}" at ${best.matchedSwitchIp}`;
+              ringPortIfIndex = best.localIfIndex;
+              ringPortAutoDetected = true;
+            }
           }
+          // If no same-ring match, do NOT suggest a cross-ring switch
+          // (that would create a wrong ring topology)
         }
       }
 
