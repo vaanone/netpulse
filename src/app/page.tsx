@@ -93,7 +93,7 @@ interface SwitchSnapshot {
   switchId: string; name: string; ipAddress: string; location?: string | null;
   snmpVersion: number; ringId: string | null; ringName: string | null;
   ringLabel: string | null; companyName: string | null;
-  nextSwitchId: string | null; nextSwitchName: string | null; prevSwitchId: string | null;
+  nextSwitchId: string | null; nextSwitchName: string | null; prevSwitchId: string | null; prevSwitchName: string | null;
   status: "up" | "down" | "unreachable" | "unknown"; mode: "snmp" | "simulate" | "boot"; error?: string;
   sysName?: string | null; sysDescr?: string | null; uptimeSeconds?: number | null;
   cpuUsage?: number | null; memoryUsed?: number | null; memoryFree?: number | null;
@@ -3109,7 +3109,7 @@ function SwitchDetailDialog(props: {
                       className="px-2 py-1 rounded-md border border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-colors flex items-center gap-1"
                     >
                       <ArrowLeft className="size-3 text-muted-foreground" />
-                      <span className="font-medium">{sw.prevSwitchId}</span>
+                      <span className="font-medium">{sw.prevSwitchName ?? sw.prevSwitchId}</span>
                     </button>
                   )}
                   <span className="px-2.5 py-1 rounded-md border border-primary/40 bg-primary/10 text-primary font-semibold">
@@ -3189,7 +3189,7 @@ function SwitchDetailDialog(props: {
                   <div className="flex flex-col items-center gap-1">
                     <div className="px-3 py-2 rounded-lg border border-border/60 bg-muted/20 text-center min-w-[80px]">
                       <div className="text-[10px] text-muted-foreground">Previous</div>
-                      <div className="text-xs font-semibold">{sw.prevSwitchId}</div>
+                      <div className="text-xs font-semibold">{sw.prevSwitchName ?? sw.prevSwitchId}</div>
                     </div>
                     <Badge variant="outline" className="text-[9px] border-ok/40 text-ok">
                       <ArrowRight className="size-2.5 mr-0.5" />

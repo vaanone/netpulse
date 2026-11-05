@@ -32,7 +32,8 @@ export interface NeighborSnapshot {
 export interface SwitchSnapshot {
   switchId: string; name: string; ipAddress: string; location?: string | null; snmpVersion: number;
   ringId: string | null; ringName: string | null; ringLabel: string | null; companyName: string | null;
-  nextSwitchId: string | null; nextSwitchName: string | null; prevSwitchId: string | null;
+  nextSwitchId: string | null; nextSwitchName: string | null;
+  prevSwitchId: string | null; prevSwitchName: string | null;
   status: "up" | "down" | "unreachable" | "unknown"; mode: "snmp" | "simulate" | "boot"; error?: string;
   sysName?: string | null; sysDescr?: string | null; uptimeSeconds?: number | null;
   cpuUsage?: number | null; memoryUsed?: number | null; memoryFree?: number | null;
@@ -75,7 +76,10 @@ export async function runPollCycle(): Promise<Snapshot> {
       catch (e: any) { return { sw, poll: simulateSwitch(sw, e?.message ?? "unknown error") }; }
     }));
     const switchById = new Map(switches.map((s) => [s.id, s]));
-    const prevSwitchIdOf = (id: string): string | null => { for (const s of switches) { if (s.nextSwitchId === id) return s.id; } return null; };
+    const prevSwitchOf = (id: string): { id: string; name: string; ipAddress: string } | null => {
+      for (const s of switches) { if (s.nextSwitchId === id) return { id: s.id, name: s.name, ipAddress: s.ipAddress }; }
+      return null;
+    };
 
     for (const res of results) {
       if (res.status !== "fulfilled") continue;
@@ -186,7 +190,7 @@ export async function runPollCycle(): Promise<Snapshot> {
         switchId: sw.id, name: sw.name, ipAddress: sw.ipAddress, location: sw.location, snmpVersion: sw.snmpVersion,
         ringId: sw.ring?.id ?? null, ringName: sw.ring?.name ?? sw.ring?.label ?? null, ringLabel: sw.ring?.label ?? null,
         companyName: sw.ring?.company?.name ?? null, nextSwitchId: sw.nextSwitchId ?? null, nextSwitchName: remoteSwitch?.name ?? null,
-        prevSwitchId: prevSwitchIdOf(sw.id), status: poll.reachable || poll.mode === "simulate" ? "up" : "unreachable",
+        prevSwitchId: prevSwitchOf(sw.id)?.id ?? null, prevSwitchName: prevSwitchOf(sw.id)?.name ?? null, status: poll.reachable || poll.mode === "simulate" ? "up" : "unreachable",
         mode: poll.mode, error: poll.error, sysName: poll.sysName, sysDescr: poll.sysDescr, uptimeSeconds: poll.uptimeSeconds,
         cpuUsage: poll.cpuUsage, memoryUsed: poll.memoryUsed, memoryFree: poll.memoryFree, memoryTotal, memoryUsage,
         lastSeen: poll.reachable ? new Date() : null, ports: portsSnap, neighbors: neighborSnap,
