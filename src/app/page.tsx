@@ -98,6 +98,11 @@ interface SwitchSnapshot {
   sysName?: string | null; sysDescr?: string | null; uptimeSeconds?: number | null;
   cpuUsage?: number | null; memoryUsed?: number | null; memoryFree?: number | null;
   memoryTotal?: number | null; memoryUsage?: number | null; lastSeen?: string | Date | null;
+  power?: {
+    powerSupplies: Array<{ index: number; status: number; statusText: string; type: string | null }>;
+    totalPoeMilliWatts: number | null;
+    totalPoeWatts: number | null;
+  } | null;
   ports: PortSnapshot[]; neighbors: NeighborSnapshot[];
   ringPortAutoDetected: boolean;
   suggestedNextSwitchId: string | null; suggestedNextSwitchName: string | null; suggestedNextSwitchReason: string | null;
@@ -3468,8 +3473,28 @@ function SwitchDetailDialog(props: {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <DetailField label="sysName" value={sw.sysName ?? "—"} mono />
               <DetailField label="Uptime" value={fmtUptime(sw.uptimeSeconds)} mono />
-              <DetailField label="Memory Used / Total" value={sw.memoryUsed != null && sw.memoryTotal != null ? `${sw.memoryUsed} / ${sw.memoryTotal} MB` : "—"} mono />
+              <DetailField label="Memory Used / Total" value={sw.memoryUsed != null && sw.memoryTotal != null ? `${(sw.memoryUsed / 1048576).toFixed(0)} / ${(sw.memoryTotal / 1048576).toFixed(0)} MB` : "—"} mono />
               <DetailField label="Ports Up / Down" value={`${sw.portsUp} / ${sw.portsDown}`} mono />
+              <DetailField label="PoE Power" value={sw.power?.totalPoeWatts != null ? `${sw.power.totalPoeWatts.toFixed(1)} W` : "—"} mono />
+              <div className="sm:col-span-2">
+                <div className="text-[10px] uppercase text-muted-foreground tracking-wider mb-1">Power Supplies</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {sw.power && sw.power.powerSupplies.length > 0 ? (
+                    sw.power.powerSupplies.map((ps) => {
+                      const ok = ps.statusText === "on";
+                      const warn = ps.statusText === "fan-fail" || ps.statusText === "env-other" || ps.statusText === "cooling";
+                      const fail = ps.statusText === "off" || ps.statusText === "failed";
+                      return (
+                        <Badge key={ps.index} variant="outline" className={cn("text-[10px]", ok ? "border-ok/40 text-ok" : warn ? "border-warn/40 text-warn" : fail ? "border-crit/40 text-crit" : "border-muted-foreground/30")}>
+                          PSU{ps.index - 999}{ps.type ? ` · ${ps.type}` : ""}: {ps.statusText}
+                        </Badge>
+                      );
+                    })
+                  ) : (
+                    <span className="text-muted-foreground">No PSU data</span>
+                  )}
+                </div>
+              </div>
               <div className="sm:col-span-2">
                 <div className="text-[10px] uppercase text-muted-foreground tracking-wider mb-1">sysDescr</div>
                 <div className="font-mono text-[11px] text-muted-foreground bg-muted/30 rounded-md p-2 border border-border/40 max-h-24 overflow-y-auto">{sw.sysDescr ?? "—"}</div>

@@ -37,10 +37,30 @@ export const OID = {
   cpmCPUTotal5minRev: "1.3.6.1.4.1.9.9.109.1.1.1.1.8",
   ciscoMemoryPoolUsed: "1.3.6.1.4.1.9.9.48.1.1.1.5",
   ciscoMemoryPoolFree: "1.3.6.1.4.1.9.9.48.1.1.1.6",
+  // Power supply status (CISCO-ENTITY-FRU-CONTROL-MIB)
+  cefcFRUPowerSupplyStatus: "1.3.6.1.4.1.9.9.117.1.1.2.1.2",  // operStatus: 1=on, 2=off, 3=failed, 4=on-but-fan-fail
+  cefcFRUPowerSupplyType:  "1.3.6.1.4.1.9.9.117.1.1.2.1.1",    // psClass: 1=AC, 2=DC, 3=AC-Redundant
+  // Total PoE power consumption per port (CISCO-POWER-ETHERNET-EXT-MIB)
+  cpeExtPsePortPwrConsumption: "1.3.6.1.4.1.9.9.402.1.2.1.1.7",  // milliWatts consumed on the port
+  // Total power drawn by all PSE (CISCO-POWER-ETHERNET-MIB)
+  pethMainPseConsumptionPower: "1.3.6.1.2.1.105.1.1.1.4",
   sysUpTime: "1.3.6.1.2.1.1.3.0",
   sysDescr: "1.3.6.1.2.1.1.1.0",
   sysName: "1.3.6.1.2.1.1.5.0",
 } as const;
+
+export interface PowerSupply {
+  index: number;
+  status: number;        // 1=on, 2=off, 3=failed, 4=on-but-fan-fail, 5=off-env-other, 6=off-cooling
+  statusText: "on" | "off" | "failed" | "fan-fail" | "env-other" | "cooling" | "unknown";
+  type: string | null;   // "AC", "DC", "AC-Redundant", etc.
+}
+
+export interface PowerSummary {
+  powerSupplies: PowerSupply[];
+  totalPoeMilliWatts: number | null;  // PoE total power consumption (across all PSE groups)
+  totalPoeWatts: number | null;
+}
 
 export interface CdpNeighbor {
   localIfIndex: number;
@@ -62,6 +82,7 @@ export interface PollResult {
   cpuUsage?: number | null;
   memoryUsed?: number | null;
   memoryFree?: number | null;
+  power?: PowerSummary | null;
   interfaces: any[];
   domReadings: Record<number, any>;
   thresholds: Record<number, any>;
@@ -69,6 +90,62 @@ export interface PollResult {
   neighbors: CdpNeighbor[];
   ringPortIfIndex: number | null;
   polledAt: Date;
+}
+
+const PSU_STATUS_TEXT: Record<number, PowerSupply["statusText"]> = {
+  1: "on", 2: "off", 3: "failed", 4: "fan-fail",
+  5: "env-other", 6: "cooling",
+};
+const PSU_TYPE_TEXT: Record<number, string> = {
+  1: "AC", 2: "DC", 3: "AC-Redundant", 4: "DC-Redundant", 5: "AC-DC",
+};
+
+async function pollPower(session: net_snmp.Session): Promise<PowerSummary | null> {
+  const powerSupplies: PowerSupply[] = [];
+  let totalPoeMilliWatts: number | null = null;
+
+  // Power supply status (CISCO-ENTITY-FRU-CONTROL-MIB)
+  try {
+    const [statusVars, typeVars] = await Promise.all([
+      snmpSubtree(session, OID.cefcFRUPowerSupplyStatus),
+      snmpSubtree(session, OID.cefcFRUPowerSupplyType),
+    ]);
+    for (const vb of statusVars) {
+      const idx = parseInt(vb.oid.split(".").pop() ?? "", 10);
+      if (!Number.isFinite(idx)) continue;
+      const statusNum = asNumber(vb);
+      if (statusNum == null) continue;
+      const typeNum = typeVars.find((t) => t.oid.endsWith("." + idx)) ? asNumber(typeVars.find((t) => t.oid.endsWith("." + idx))!) : null;
+      powerSupplies.push({
+        index: idx,
+        status: statusNum,
+        statusText: PSU_STATUS_TEXT[statusNum] ?? "unknown",
+        type: typeNum != null ? (PSU_TYPE_TEXT[typeNum] ?? `Class ${typeNum}`) : null,
+      });
+    }
+  } catch {}
+
+  // Total PoE power consumption across all PSE groups (POWER-ETHERNET-MIB)
+  try {
+    const poeVars = await snmpSubtree(session, OID.pethMainPseConsumptionPower);
+    if (poeVars.length > 0) {
+      let sum = 0;
+      let found = false;
+      for (const vb of poeVars) {
+        const v = asNumber(vb);
+        if (v != null) { sum += v; found = true; }
+      }
+      // pethMainPseConsumptionPower is in milliWatts
+      if (found) totalPoeMilliWatts = sum;
+    }
+  } catch {}
+
+  if (powerSupplies.length === 0 && totalPoeMilliWatts == null) return null;
+  return {
+    powerSupplies,
+    totalPoeMilliWatts,
+    totalPoeWatts: totalPoeMilliWatts != null ? totalPoeMilliWatts / 1000 : null,
+  };
 }
 
 function securityLevelFromString(s: string | null | undefined): net_snmp.SecurityLevel {
@@ -241,6 +318,7 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
     }
   } catch {}
   try { result.neighbors = await discoverNeighbors(session); } catch {}
+  try { result.power = await pollPower(session); } catch { result.power = null; }
   return result;
 }
 
@@ -463,12 +541,28 @@ export function simulateSwitch(row: SwitchRow, errMsg: string): PollResult {
     // We don't generate a fake "prev" based on IP-1 because that
     // IP often doesn't match any configured switch.
   }
+  // Simulated power supply data — most Catalyst switches have 1 or 2 PSUs.
+  // Most are healthy (status=on); occasional demo variance.
+  const psuCount = r() > 0.6 ? 2 : 1;
+  const powerSupplies = Array.from({ length: psuCount }, (_, i) => {
+    const statusNum = i === 0 ? 1 : (r() > 0.85 ? 3 : 1);  // first PSU always ON; second occasionally failed
+    return {
+      index: 1000 + i,
+      status: statusNum,
+      statusText: PSU_STATUS_TEXT[statusNum] ?? "unknown" as PowerSupply["statusText"],
+      type: i === 0 ? "AC" : (r() > 0.5 ? "AC" : "AC-Redundant"),
+    } as PowerSupply;
+  });
+  // Simulated PoE total — between 0 and 400W depending on switch load
+  const totalPoeMilliWatts = Math.floor(r() * 400_000);
+
   return {
     reachable: false, mode: "simulate", error: errMsg,
     sysDescr: "Cisco IOS Software [Simulated] - NETPULSE demo mode", sysName: row.name,
     uptimeSeconds: Math.floor(r() * 60 * 86400), cpuUsage: 5 + r() * 30,
     memoryUsed: Math.floor(0.3 * 1073741824 + r() * 0.4 * 1073741824),
     memoryFree: Math.floor(0.2 * 1073741824 + r2() * 0.3 * 1073741824),
+    power: { powerSupplies, totalPoeMilliWatts, totalPoeWatts: totalPoeMilliWatts / 1000 },
     interfaces, domReadings, thresholds,
     transceivers: IF_NAMES_SFP.map((n, i) => ({ entityIndex: 1000 + i, name: n, descr: "SFP-10G-SR", modelName: "SFP-10G-SR", serialNum: `SIM${(seed + i).toString(16).toUpperCase().padStart(8, "0")}`, parentEntityIndex: 0, ifIndex: 101 + i })),
     neighbors, ringPortIfIndex: null, polledAt: new Date(),

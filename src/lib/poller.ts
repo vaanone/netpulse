@@ -5,7 +5,7 @@
  */
 
 import { db } from "@/lib/db";
-import { pollSwitch, simulateSwitch, type PollResult } from "@/lib/snmp";
+import { pollSwitch, simulateSwitch, type PollResult, type PowerSummary, type PowerSupply } from "@/lib/snmp";
 
 export interface PortSnapshot {
   switchId: string; switchName: string; switchIp: string; switchStatus: string;
@@ -38,6 +38,7 @@ export interface SwitchSnapshot {
   sysName?: string | null; sysDescr?: string | null; uptimeSeconds?: number | null;
   cpuUsage?: number | null; memoryUsed?: number | null; memoryFree?: number | null;
   memoryTotal?: number | null; memoryUsage?: number | null; lastSeen?: Date | null;
+  power?: PowerSummary | null;
   ports: PortSnapshot[]; neighbors: NeighborSnapshot[];
   ringPortAutoDetected: boolean;
   suggestedNextSwitchId: string | null; suggestedNextSwitchName: string | null; suggestedNextSwitchReason: string | null;
@@ -230,6 +231,7 @@ export async function runPollCycle(): Promise<Snapshot> {
         prevSwitchId: prevSwitchOf(sw.id)?.id ?? null, prevSwitchName: prevSwitchOf(sw.id)?.name ?? null, status: poll.reachable || poll.mode === "simulate" ? "up" : "unreachable",
         mode: poll.mode, error: poll.error, sysName: poll.sysName, sysDescr: poll.sysDescr, uptimeSeconds: poll.uptimeSeconds,
         cpuUsage: poll.cpuUsage, memoryUsed: poll.memoryUsed, memoryFree: poll.memoryFree, memoryTotal, memoryUsage,
+        power: poll.power ?? null,
         lastSeen: poll.reachable ? new Date() : null, ports: portsSnap, neighbors: neighborSnap,
         ringPortAutoDetected, suggestedNextSwitchId, suggestedNextSwitchName, suggestedNextSwitchReason,
         ringPort, ringInMbps: ringPort?.inMbps ?? null, ringOutMbps: ringPort?.outMbps ?? null, ringUtilization: ringPort?.utilization ?? null,
