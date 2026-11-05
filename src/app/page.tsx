@@ -3504,15 +3504,6 @@ function SwitchDetailDialog(props: {
             <Trash2 className="size-3.5" />
             Delete Switch
           </Button>
-          <Button
-            variant="default"
-            onClick={() => { if (detailRowQ.data) onEdit(detailRowQ.data); }}
-            className="gap-1.5"
-            disabled={!detailRowQ.data}
-          >
-            <Pencil className="size-3.5" />
-            Edit Switch
-          </Button>
           <DialogClose asChild>
             <Button variant="outline">Close</Button>
           </DialogClose>
