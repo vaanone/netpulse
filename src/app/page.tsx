@@ -2542,6 +2542,49 @@ function SwitchFormDialog(props: {
   const [ringId, setRingId] = React.useState<string>("");
   const [nextSwitchId, setNextSwitchId] = React.useState<string>("");
 
+  // Auto-detect nearby switches via CDP/LLDP
+  const [detecting, setDetecting] = React.useState(false);
+  const [detectedNeighbors, setDetectedNeighbors] = React.useState<Array<{
+    deviceId: string; devicePort: string; address: string | null;
+    protocol: string; matchedSwitchId: string | null; matchedSwitchName: string | null;
+  }>>([]);
+
+  const handleDetect = async () => {
+    if (!ipAddress.trim()) return;
+    setDetecting(true);
+    setDetectedNeighbors([]);
+    try {
+      const r = await fetch("/api/detect-neighbors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          ipAddress: ipAddress.trim(),
+          snmpVersion,
+          community,
+          snmpPort,
+          v3SecurityLevel, v3Username, v3AuthProtocol, v3AuthPassword,
+          v3PrivProtocol, v3PrivPassword,
+        }),
+      });
+      if (!r.ok) throw new Error("Detection failed");
+      const data = await r.json();
+      setDetectedNeighbors(data.neighbors || []);
+      const matched = (data.neighbors || []).filter((n: any) => n.matchedSwitchId);
+      if (matched.length > 0) {
+        toast.success(`Found ${matched.length} nearby switch${matched.length === 1 ? "" : "es"}! Click to select.`);
+      } else if ((data.neighbors || []).length > 0) {
+        toast.info(`Found ${(data.neighbors || []).length} CDP/LLDP neighbors, but none match configured switches. Add them first.`);
+      } else {
+        toast.info("No CDP/LLDP neighbors found. Make sure CDP/LLDP is enabled on the switch.");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Detection failed");
+    } finally {
+      setDetecting(false);
+    }
+  };
+
   // inline create state
   const [inlineCompany, setInlineCompany] = React.useState("");
   const [inlineRing, setInlineRing] = React.useState("");
@@ -2840,14 +2883,57 @@ function SwitchFormDialog(props: {
 
           {/* Next switch */}
           <div className="space-y-1.5">
-            <Label>Next Switch in Ring</Label>
+            <div className="flex items-center justify-between">
+              <Label>Next Switch in Ring</Label>
+              {!editing && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[10px] gap-1"
+                  disabled={!ipAddress.trim() || detecting}
+                  onClick={handleDetect}
+                >
+                  {detecting ? (
+                    <><RefreshCw className="size-3 animate-spin" /> Detecting…</>
+                  ) : (
+                    <><Crosshair className="size-3" /> Auto-Detect Nearby</>
+                  )}
+                </Button>
+              )}
+            </div>
             <Select value={nextSwitchId} onValueChange={setNextSwitchId} disabled={!ringId}>
               <SelectTrigger className="w-full"><SelectValue placeholder={ringId ? "Select next switch (optional)" : "Select ring first"} /></SelectTrigger>
               <SelectContent>
                 {availableNextSwitches.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.ipAddress})</SelectItem>)}
               </SelectContent>
             </Select>
-            <p className="text-[10px] text-muted-foreground">Defines the ring direction. The selected switch becomes the next hop in this ring.</p>
+            {detectedNeighbors.length > 0 && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-2 space-y-1">
+                <div className="text-[10px] text-primary font-medium flex items-center gap-1">
+                  <Crosshair className="size-3" /> Detected CDP/LLDP neighbors:
+                </div>
+                {detectedNeighbors.filter(n => n.matchedSwitchId).map(n => (
+                  <button
+                    key={n.matchedSwitchId}
+                    onClick={() => setNextSwitchId(n.matchedSwitchId!)}
+                    className="flex items-center gap-1.5 text-xs hover:text-primary hover:underline w-full text-left"
+                  >
+                    <ArrowRight className="size-3 text-primary" />
+                    <span className="font-medium">{n.matchedSwitchName}</span>
+                    <span className="text-muted-foreground font-mono text-[10px]">({n.address ?? n.deviceId})</span>
+                    <span className="text-[10px] text-muted-foreground">via {n.protocol.toUpperCase()} on {n.devicePort}</span>
+                  </button>
+                ))}
+                {detectedNeighbors.filter(n => n.matchedSwitchId).length === 0 && (
+                  <div className="text-[10px] text-muted-foreground">
+                    No matching switches found. Add the neighboring switch to NETPULSE first, then re-detect.
+                  </div>
+                )}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Defines the ring direction. Click "Auto-Detect" to scan the switch via SNMP/CDP/LLDP and find nearby switches.
+            </p>
           </div>
         </div>
 
