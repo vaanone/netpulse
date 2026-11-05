@@ -154,6 +154,9 @@ function findBySuffixNumber(varbinds: net_snmp.Varbind[], suffix: string): numbe
 function findBySuffixBigInt(varbinds: net_snmp.Varbind[], suffix: string): bigint | null {
   return findValueBySuffix(varbinds, suffix, asBigInt);
 }
+function findBySuffixString(varbinds: net_snmp.Varbind[], suffix: string): string | null {
+  return findValueBySuffix(varbinds, suffix, asString);
+}
 
 export async function pollSwitch(row: SwitchRow): Promise<PollResult> {
   let session: net_snmp.Session | null = null;
@@ -219,9 +222,14 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
     const idxList = ifIdx.map((vb) => asNumber(vb)).filter((v): v is number => v !== null);
     for (const ifIndex of idxList) {
       const suffix = String(ifIndex);
+      const name = findBySuffixString(ifNameV, suffix);
+      const descr = findBySuffixString(ifDescr, suffix);
+      const alias = findBySuffixString(ifAliasV, suffix);
       result.interfaces.push({
-        ifIndex, ifName: findBySuffixNumber(ifNameV, suffix) !== null ? String(findBySuffixNumber(ifNameV, suffix)) : `if${ifIndex}`,
-        ifDescr: String(findBySuffixNumber(ifDescr, suffix) ?? ""), ifAlias: String(findBySuffixNumber(ifAliasV, suffix) ?? ""),
+        ifIndex,
+        ifName: name ?? descr ?? `if${ifIndex}`,
+        ifDescr: descr ?? "",
+        ifAlias: alias ?? "",
         ifSpeed: findBySuffixBigInt(ifSpd, suffix), ifHighSpeed: findBySuffixNumber(ifHSpd, suffix),
         ifOperStatus: findBySuffixNumber(ifOper, suffix), ifAdminStatus: findBySuffixNumber(ifAdmin, suffix),
         ifInOctets: findBySuffixBigInt(ifIn, suffix), ifOutOctets: findBySuffixBigInt(ifOut, suffix),
