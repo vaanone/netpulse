@@ -397,16 +397,11 @@ export function simulateSwitch(row: SwitchRow, errMsg: string): PollResult {
       platform: "Cisco IOS Software, Catalyst L3 Switch Software (CAT3K_CAA-UNIVERSALK9-M)",
       protocol: "cdp" as const,
     });
-    // Neighbor on port 2: previous IP in sequence
-    const prevOctet = myLastOctet > 1 ? myLastOctet - 1 : 254;
-    neighbors.push({
-      localIfIndex: 102,
-      deviceId: row.name.replace(/-\d+$/, "").replace(/-/g, "") + "-prev",
-      devicePort: "Te1/0/2",
-      address: `${prefix}.${prevOctet}`,
-      platform: "Cisco IOS Software, Catalyst L3 Switch Software (CAT3K_CAA-UNIVERSALK9-M)",
-      protocol: "cdp" as const,
-    });
+    // Note: We only generate a "next" CDP neighbor (port 1).
+    // The "prev" neighbor is determined by the poller based on which
+    // configured switches point to this switch via nextSwitchId.
+    // We don't generate a fake "prev" based on IP-1 because that
+    // IP often doesn't match any configured switch.
   }
   return {
     reachable: false, mode: "simulate", error: errMsg,

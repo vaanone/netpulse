@@ -4,12 +4,12 @@ import { pollSwitch } from "@/lib/snmp";
 
 // POST /api/detect-neighbors
 // Body: { name, ipAddress, snmpVersion, community?, snmpPort?, v3... }
-// Returns: { neighbors: [{ deviceId, devicePort, address, matchedSwitchId?, matchedSwitchName? }] }
+// Returns: { reachable, neighbors: [{ deviceId, devicePort, address, matchedSwitchId?, matchedSwitchName?, protocol }] }
 //
-// This endpoint polls a switch that hasn't been added yet (using the
-// provided SNMP credentials) and checks its CDP/LLDP neighbors against
-// all switches already configured in NETPULSE. This lets the Add Switch
-// form auto-fill the "Next Switch in Ring" field.
+// This endpoint polls a switch (that hasn't been added yet) and checks
+// its CDP/LLDP neighbors against all switches already configured in NETPULSE.
+// If the switch is unreachable (simulation mode), it returns simulated
+// neighbors based on IP subnet proximity.
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -42,19 +42,19 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    const poll = await pollSwitch(tempSwitch as any);
-
     // Get all existing switches to match against
     const existingSwitches = await db.switch.findMany({
       select: { id: true, name: true, ipAddress: true, ringId: true },
     });
+
+    const poll = await pollSwitch(tempSwitch as any);
 
     // Match each discovered neighbor against existing switches
     const neighbors = (poll.neighbors || []).map((n) => {
       let matchedSwitchId: string | null = null;
       let matchedSwitchName: string | null = null;
 
-      // Match by IP address
+      // 1. Match by IP address (most reliable)
       if (n.address) {
         const byIp = existingSwitches.find(s => s.ipAddress === n.address);
         if (byIp) {
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
           matchedSwitchName = byIp.name;
         }
       }
-      // Match by hostname
+      // 2. Match by hostname
       if (!matchedSwitchId && n.deviceId) {
         const byName = existingSwitches.find(s => s.name.toLowerCase() === n.deviceId!.toLowerCase());
         if (byName) {
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
           matchedSwitchName = byName.name;
         }
       }
-      // Fuzzy match by hostname suffix
+      // 3. Fuzzy match by hostname suffix
       if (!matchedSwitchId && n.deviceId) {
         const lowerId = n.deviceId.toLowerCase();
         const bySuffix = existingSwitches.find(s =>
@@ -92,6 +92,33 @@ export async function POST(req: NextRequest) {
         matchedSwitchName,
       };
     });
+
+    // In simulation mode: also check ALL existing switches in the same IP subnet
+    // This catches switches that the simulator might not have generated as CDP neighbors
+    if (!poll.reachable) {
+      const ipParts = body.ipAddress.split(".").map(Number);
+      if (ipParts.length === 4) {
+        const subnet = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
+        const sameSubnet = existingSwitches.filter(s => {
+          if (s.ipAddress === body.ipAddress) return false; // skip self
+          const parts = s.ipAddress.split(".");
+          return parts.length === 4 && `${parts[0]}.${parts[1]}.${parts[2]}` === subnet;
+        });
+        for (const sw of sameSubnet) {
+          const alreadyAdded = neighbors.some(n => n.matchedSwitchId === sw.id);
+          if (!alreadyAdded) {
+            neighbors.push({
+              deviceId: sw.name,
+              devicePort: "auto-detected",
+              address: sw.ipAddress,
+              protocol: "cdp",
+              matchedSwitchId: sw.id,
+              matchedSwitchName: sw.name,
+            });
+          }
+        }
+      }
+    }
 
     return NextResponse.json({
       reachable: poll.reachable,
