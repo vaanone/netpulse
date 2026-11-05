@@ -258,10 +258,28 @@ async function persistSwitchSnapshot(switchId: string, poll: PollResult, ports: 
   const minRx = ports.map((p) => p.rxPower).filter((v): v is number => v !== null).reduce<number | null>((m, v) => (m === null ? v : Math.min(m, v)), null);
   const vals = ports.map((p) => p.rxPower).filter((v): v is number => v !== null);
   const avgRx = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  await db.metric.create({ data: { switchId, cpuUsage: poll.cpuUsage, memoryTotal: poll.memoryUsed != null && poll.memoryFree != null ? poll.memoryUsed + poll.memoryFree : null, memoryUsed: poll.memoryUsed ?? null, uptimeSeconds: poll.uptimeSeconds ?? null, totalInBps, totalOutBps, minRxPower: minRx, avgRxPower: avgRx, portsUp: ports.filter((p) => p.ifOperStatus === 1).length, portsDown: ports.filter((p) => p.ifOperStatus === 2).length, portsAlarm: ports.filter((p) => (p.rxPower != null && p.rxAlarmLow != null && p.rxPower <= p.rxAlarmLow) || p.totalErrors > 0).length, portsWarning: ports.filter((p) => p.opticalMargin !== null && p.opticalMargin < 3 && p.opticalMargin >= 0).length } });
+  await db.metric.create({ data: { switchId, cpuUsage: poll.cpuUsage, memoryTotal: poll.memoryUsed != null && poll.memoryFree != null ? poll.memoryUsed + poll.memoryFree : null, memoryUsed: poll.memoryUsed ?? null, uptimeSeconds: poll.uptimeSeconds ?? null, totalInBps, totalOutBps, minRxPower: minRx, avgRxPower: avgRx, portsUp: ports.filter((p) => p.ifOperStatus === 1).length, portsDown: ports.filter((p) => p.ifOperStatus === 2).length, portsAlarm: ports.filter((p) => (p.rxPower != null && p.rxAlarmLow != null && p.rxPower <= p.rxAlarmLow) || p.totalErrors > 0).length, portsWarning: ports.filter((p) => p.opticalMargin !== null && p.opticalMargin < 3 && p.opticalMargin >= 0).length, totalPoeWatts: poll.power?.totalPoeWatts ?? null } });
   const cutoff = new Date(Date.now() - 24 * 3600 * 1000);
   await db.metric.deleteMany({ where: { timestamp: { lt: cutoff } } });
   await db.alert.deleteMany({ where: { resolved: true, resolvedAt: { lt: new Date(Date.now() - 30 * 24 * 3600 * 1000) } } });
+
+  // Persist PSU status (upsert by switchId + psuIndex)
+  if (poll.power && poll.power.powerSupplies.length > 0) {
+    for (const ps of poll.power.powerSupplies) {
+      try {
+        await db.powerSupply.upsert({
+          where: { switchId_psuIndex: { switchId, psuIndex: ps.index } },
+          create: { switchId, psuIndex: ps.index, status: ps.status, statusText: ps.statusText, type: ps.type },
+          update: { status: ps.status, statusText: ps.statusText, type: ps.type },
+        });
+      } catch (e: any) {
+        console.warn("[poller] PSU upsert failed:", e?.message);
+      }
+    }
+    // Remove PSUs that no longer appear in the SNMP response
+    const validIdx = poll.power.powerSupplies.map((p) => p.index);
+    await db.powerSupply.deleteMany({ where: { switchId, psuIndex: { notIn: validIdx } } }).catch(() => {});
+  }
 }
 
 async function persistAlerts(snapshot: Snapshot) {

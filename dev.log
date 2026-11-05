@@ -5,40 +5,35 @@ $ next dev -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 662ms
+✓ Ready in 627ms
+ GET /api/metrics 200 in 57ms (compile: 38ms, render: 19ms)
+ GET /api/companies 200 in 36ms (compile: 28ms, render: 9ms)
+ GET /api/switches 200 in 78ms (compile: 66ms, render: 12ms)
+ GET /api/rings 200 in 67ms (compile: 33ms, render: 33ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 66ms (compile: 56ms, render: 11ms)
 ○ Compiling / ...
- GET / 200 in 4.6s (compile: 4.3s, render: 263ms)
- GET /api/metrics 200 in 115ms (compile: 107ms, render: 8ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 183ms (compile: 70ms, render: 113ms)
- GET /api/switches 200 in 191ms (compile: 137ms, render: 54ms)
- GET /api/companies 200 in 184ms (compile: 147ms, render: 37ms)
- GET /api/rings 200 in 186ms (compile: 168ms, render: 18ms)
+ GET / 200 in 3.6s (compile: 3.3s, render: 233ms)
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
- GET /api/switches 200 in 10ms (compile: 3ms, render: 7ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 10ms (compile: 3ms, render: 7ms)
+ GET /api/switches 200 in 12ms (compile: 3ms, render: 9ms)
+ GET /api/companies 200 in 12ms (compile: 7ms, render: 6ms)
+ GET /api/metrics 200 in 5ms (compile: 1992µs, render: 3ms)
+ GET /api/rings 200 in 9ms (compile: 2ms, render: 7ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 10ms (compile: 5ms, render: 5ms)
+ POST /api/poll 200 in 16.9s (compile: 248ms, render: 16.6s)
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 3ms, render: 6ms)
  GET /api/metrics 200 in 7ms (compile: 3ms, render: 4ms)
-[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 12ms (compile: 3ms, render: 9ms)
- GET /api/debug/switch/cmw38ftxq0008r9hwlqdpdg0c/poll 200 in 17.2s (compile: 637ms, render: 16.5s)
- GET /api/rings 200 in 9ms (compile: 3ms, render: 6ms)
- GET /api/companies 200 in 6ms (compile: 1630µs, render: 5ms)
- GET /api/switches 200 in 6ms (compile: 1485µs, render: 5ms)
- GET /api/metrics 200 in 6ms (compile: 2ms, render: 3ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 2ms, render: 7ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 10ms (compile: 3ms, render: 7ms)
+ GET /api/switches 200 in 15ms (compile: 4ms, render: 11ms)
+ GET /api/companies 200 in 16ms (compile: 9ms, render: 7ms)
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
-[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
-[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
-[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
-[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 2ms, render: 7ms)
- GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/rings 200 in 7ms (compile: 2ms, render: 5ms)
