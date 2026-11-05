@@ -311,6 +311,8 @@ const IF_NAMES_SFP = ["Te1/0/1", "Te1/0/2", "Gi1/0/1", "Gi1/0/2", "Gi2/0/1", "Gi
 const IF_NAMES_ACCESS = ["Gi1/0/3", "Gi1/0/4", "Gi1/0/5", "Gi1/0/6", "Gi1/0/7", "Gi1/0/8", "Gi1/0/9", "Gi1/0/10"];
 const IF_DESCR_SFP = ["TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2", "GigabitEthernet1/0/1", "GigabitEthernet1/0/2", "GigabitEthernet2/0/1", "GigabitEthernet2/0/2"];
 const IF_DESCR_ACCESS = ["GigabitEthernet1/0/3", "GigabitEthernet1/0/4", "GigabitEthernet1/0/5", "GigabitEthernet1/0/6", "GigabitEthernet1/0/7", "GigabitEthernet1/0/8", "GigabitEthernet1/0/9", "GigabitEthernet1/0/10"];
+const IF_ALIAS_SFP = ["Ring uplink to next switch", "Ring downlink to prev switch", "Uplink to core", "Uplink to distribution", "Inter-switch link A", "Inter-switch link B"];
+const IF_ALIAS_ACCESS = ["Access port - Floor 1", "Access port - Floor 2", "Access port - Floor 3", "Access port - Server room", "Access port - AP Controller", "Access port - Voice VLAN", "Access port - Guest VLAN", "Access port - Management"];
 
 export function simulateSwitch(row: SwitchRow, errMsg: string): PollResult {
   const seed = seedFor(row.ipAddress);
@@ -318,6 +320,14 @@ export function simulateSwitch(row: SwitchRow, errMsg: string): PollResult {
   const r2 = rng(seed, 7);
   const interfaces: any[] = [];
   let counter = 1000000n + BigInt(Math.floor(r2() * 5_000_000));
+
+  // ─── SFP/Fiber ports (ports 101-106) ───
+  // Port 101 (Te1/0/1) = Ring port → always UP (connected to next switch)
+  // Port 102 (Te1/0/2) = Ring port → always UP (connected to prev switch) 
+  // Port 103 (Gi1/0/1) = Uplink → UP if SFP inserted, DOWN if no SFP
+  // Port 104 (Gi1/0/2) = Uplink → random UP/DOWN
+  // Port 105 (Gi2/0/1) = Inter-switch → random UP/DOWN
+  // Port 106 (Gi2/0/2) = Inter-switch → random UP/DOWN
   for (let i = 0; i < IF_NAMES_SFP.length; i++) {
     const ifIndex = 101 + i;
     const isTenGig = IF_NAMES_SFP[i].startsWith("Te");
@@ -326,26 +336,68 @@ export function simulateSwitch(row: SwitchRow, errMsg: string): PollResult {
     const inOctets = counter + BigInt(Math.floor(r() * 500_000_000));
     const outOctets = counter + BigInt(Math.floor(r2() * 350_000_000));
     counter = inOctets;
+    // First 2 ports (ring ports) are always UP. Others are random.
+    const isRingPort = i < 2;
+    const operStatus = isRingPort ? 1 : (r() > 0.25 ? 1 : 2);
+    const adminStatus = isRingPort ? 1 : (r() > 0.1 ? 1 : 2);
+    // Only generate traffic counters for UP ports
+    const hasTraffic = operStatus === 1;
     interfaces.push({
-      ifIndex, ifName: IF_NAMES_SFP[i], ifDescr: IF_DESCR_SFP[i], ifAlias: `SFP+ port ${i + 1}`,
-      ifSpeed: speed, ifHighSpeed: highSpeed, ifOperStatus: 1, ifAdminStatus: 1,
-      ifInOctets: inOctets, ifOutOctets: outOctets, ifHCInOctets: inOctets, ifHCOutOctets: outOctets,
-      ifInErrors: BigInt(Math.floor(r() * 3)), ifOutErrors: BigInt(Math.floor(r2() * 1)),
-      ifInDiscards: BigInt(0), ifOutDiscards: BigInt(0), ifInUcastPkts: inOctets / 1000n, ifOutUcastPkts: outOctets / 1000n,
+      ifIndex,
+      ifName: IF_NAMES_SFP[i],
+      ifDescr: IF_DESCR_SFP[i],
+      ifAlias: IF_ALIAS_SFP[i],
+      ifSpeed: speed,
+      ifHighSpeed: highSpeed,
+      ifOperStatus: operStatus,
+      ifAdminStatus: adminStatus,
+      ifInOctets: hasTraffic ? inOctets : null,
+      ifOutOctets: hasTraffic ? outOctets : null,
+      ifHCInOctets: hasTraffic ? inOctets : null,
+      ifHCOutOctets: hasTraffic ? outOctets : null,
+      ifInErrors: hasTraffic ? BigInt(Math.floor(r() * 3)) : BigInt(0),
+      ifOutErrors: hasTraffic ? BigInt(Math.floor(r2() * 1)) : BigInt(0),
+      ifInDiscards: BigInt(0),
+      ifOutDiscards: BigInt(0),
+      ifInUcastPkts: hasTraffic ? inOctets / 1000n : null,
+      ifOutUcastPkts: hasTraffic ? outOctets / 1000n : null,
     });
   }
+
+  // ─── Access/Copper ports (ports 201-208) ───
+  // Some UP (connected devices), some DOWN (empty ports)
   for (let i = 0; i < IF_NAMES_ACCESS.length; i++) {
+    const ifIndex = 201 + i;
+    const operStatus = r() > 0.35 ? 1 : 2;  // ~65% UP, ~35% DOWN
+    const adminStatus = r() > 0.05 ? 1 : 2;  // ~95% enabled
     interfaces.push({
-      ifIndex: 201 + i, ifName: IF_NAMES_ACCESS[i], ifDescr: IF_DESCR_ACCESS[i], ifAlias: `Access port ${i + 3}`,
-      ifSpeed: 1000000000n, ifHighSpeed: 1000, ifOperStatus: r() > 0.15 ? 1 : 2, ifAdminStatus: 1,
-      ifInOctets: null, ifOutOctets: null, ifHCInOctets: null, ifHCOutOctets: null,
-      ifInErrors: BigInt(0), ifOutErrors: BigInt(0), ifInDiscards: BigInt(0), ifOutDiscards: BigInt(0),
-      ifInUcastPkts: null, ifOutUcastPkts: null,
+      ifIndex,
+      ifName: IF_NAMES_ACCESS[i],
+      ifDescr: IF_DESCR_ACCESS[i],
+      ifAlias: IF_ALIAS_ACCESS[i],
+      ifSpeed: 1000000000n,
+      ifHighSpeed: 1000,
+      ifOperStatus: operStatus,
+      ifAdminStatus: adminStatus,
+      ifInOctets: null,
+      ifOutOctets: null,
+      ifHCInOctets: null,
+      ifHCOutOctets: null,
+      ifInErrors: BigInt(0),
+      ifOutErrors: BigInt(0),
+      ifInDiscards: BigInt(0),
+      ifOutDiscards: BigInt(0),
+      ifInUcastPkts: null,
+      ifOutUcastPkts: null,
     });
   }
-  // DOM readings — realistic Cisco SFP-10G-SR and GLC-T values
+
+  // ─── DOM readings — only for UP SFP ports ───
+  // DOWN ports don't have SFP transceivers inserted, so no DOM data
   const domReadings: Record<number, any> = {};
   for (let i = 0; i < IF_NAMES_SFP.length; i++) {
+    const iface = interfaces[i];
+    if (iface.ifOperStatus !== 1) continue; // Skip DOWN ports
     const isTenGig = IF_NAMES_SFP[i].startsWith("Te");
     if (isTenGig) {
       // 10G SFP+: Tx -1 to -7 dBm, Rx -3 to -9 dBm
