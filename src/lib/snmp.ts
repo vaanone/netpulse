@@ -35,6 +35,9 @@ export const OID = {
   lldpRemPortDesc: "1.3.6.1.2.1.105.1.7.1.5",
   lldpRemPortId: "1.3.6.1.2.1.105.1.7.1.3",
   cpmCPUTotal5minRev: "1.3.6.1.4.1.9.9.109.1.1.1.1.8",
+  cpmCPUTotal1minRev: "1.3.6.1.4.1.9.9.109.1.1.1.1.7",   // older IOS fallback
+  cpmCPUTotal5secRev: "1.3.6.1.4.1.9.9.109.1.1.1.1.6",   // even older fallback
+  cpmCPUTotal5sec:    "1.3.6.1.4.1.9.9.109.1.1.1.1.3",   // legacy (pre-Restricted)
   ciscoMemoryPoolUsed: "1.3.6.1.4.1.9.9.48.1.1.1.5",
   ciscoMemoryPoolFree: "1.3.6.1.4.1.9.9.48.1.1.1.6",
   // Power supply status (CISCO-ENTITY-FRU-CONTROL-MIB)
@@ -194,10 +197,18 @@ function snmpGet(session: net_snmp.Session, oids: string[]): Promise<net_snmp.Va
   });
 }
 function snmpSubtree(session: net_snmp.Session, oid: string): Promise<net_snmp.Varbind[]> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const results: net_snmp.Varbind[] = [];
     session.subtree(oid, 20, (varbinds) => { for (const vb of varbinds) results.push(vb); },
-      (err) => { if (err) reject(err); else resolve(results); }, { maxRepetitions: 20 });
+      (err) => {
+        // Don't reject — return whatever we have so far. Different Cisco IOS
+        // versions don't support every MIB. A missing OID should NOT bring
+        // down the whole batch via Promise.all.
+        // Common non-fatal errors:
+        //   - "No such name" / "noSuchInstance" → OID not supported
+        //   - "Request timed out" → too many OIDs in this subtree
+        resolve(results);
+      }, { maxRepetitions: 20 });
   });
 }
 function asNumber(vb: net_snmp.Varbind): number | null {
@@ -276,22 +287,34 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
     const up = asNumber(sysVars[2]);
     if (up !== null) result.uptimeSeconds = Math.floor(up / 100);
   } catch {}
+  // CPU usage — try 5min, fall back to 1min, then 5sec. Different Cisco IOS
+  // versions expose different OIDs. Older IOS (12.2) only has cpmCPUTotal5sec.
   try {
-    const cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5minRev);
+    let cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5minRev);
+    if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal1minRev);
+    if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5secRev);
+    if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5sec);
     if (cpuVars.length > 0) { const v = asNumber(cpuVars[0]); if (v !== null) result.cpuUsage = v; }
-  } catch {}
+  } catch (e: any) { console.warn("[snmp] CPU poll failed:", e?.message); }
+  // Memory — ciscoMemoryPoolUsed/Free (CISCO-MEMORY-POOL-MIB).
+  // Some IOS-XE devices also expose cpmCPUMemoryUsed (1.3.6.1.4.1.9.9.109.1.1.1.1.12)
+  // but the pool OIDs work on essentially every Catalyst.
   try {
-    const usedVars = await snmpSubtree(session, OID.ciscoMemoryPoolUsed);
-    const freeVars = await snmpSubtree(session, OID.ciscoMemoryPoolFree);
+    const [usedVars, freeVars] = await Promise.all([
+      snmpSubtree(session, OID.ciscoMemoryPoolUsed),
+      snmpSubtree(session, OID.ciscoMemoryPoolFree),
+    ]);
     let memUsed = 0, memFree = 0;
     for (const vb of usedVars) { const v = asNumber(vb); if (v !== null) memUsed += v; }
     for (const vb of freeVars) { const v = asNumber(vb); if (v !== null) memFree += v; }
-    result.memoryUsed = memUsed; result.memoryFree = memFree;
-  } catch {}
+    if (memUsed > 0 || memFree > 0) {
+      result.memoryUsed = memUsed; result.memoryFree = memFree;
+    }
+  } catch (e: any) { console.warn("[snmp] Memory poll failed:", e?.message); }
+  // Interfaces — use Promise.allSettled so a single failed OID (e.g. ifHCInOctets
+  // on a 32-bit-only counter, or ifAlias not configured) does NOT kill the whole batch.
   try {
-    const [ifIdx, ifDescr, ifNameV, ifAliasV, ifSpd, ifHSpd, ifOper, ifAdmin,
-      ifIn, ifOut, ifHCIn, ifHCOut, ifInErr, ifOutErr, ifInDisc, ifOutDisc,
-      ifInUcast, ifOutUcast] = await Promise.all([
+    const settled = await Promise.allSettled([
       snmpSubtree(session, OID.ifIndex), snmpSubtree(session, OID.ifDescr),
       snmpSubtree(session, OID.ifName), snmpSubtree(session, OID.ifAlias),
       snmpSubtree(session, OID.ifSpeed), snmpSubtree(session, OID.ifHighSpeed),
@@ -302,7 +325,17 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
       snmpSubtree(session, OID.ifInDiscards), snmpSubtree(session, OID.ifOutDiscards),
       snmpSubtree(session, OID.ifInUcastPkts), snmpSubtree(session, OID.ifOutUcastPkts),
     ]);
+    const got = (i: number): net_snmp.Varbind[] =>
+      settled[i].status === "fulfilled" ? settled[i].value : [];
+    const ifIdx = got(0), ifDescr = got(1), ifNameV = got(2), ifAliasV = got(3),
+      ifSpd = got(4), ifHSpd = got(5), ifOper = got(6), ifAdmin = got(7),
+      ifIn = got(8), ifOut = got(9), ifHCIn = got(10), ifHCOut = got(11),
+      ifInErr = got(12), ifOutErr = got(13), ifInDisc = got(14), ifOutDisc = got(15),
+      ifInUcast = got(16), ifOutUcast = got(17);
     const idxList = ifIdx.map((vb) => asNumber(vb)).filter((v): v is number => v !== null);
+    if (idxList.length === 0) {
+      console.warn("[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB");
+    }
     for (const ifIndex of idxList) {
       const suffix = String(ifIndex);
       const name = findBySuffixString(ifNameV, suffix);
@@ -322,7 +355,7 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
         ifInUcastPkts: findBySuffixBigInt(ifInUcast, suffix), ifOutUcastPkts: findBySuffixBigInt(ifOutUcast, suffix),
       });
     }
-  } catch {}
+  } catch (e: any) { console.warn("[snmp] Interface poll failed:", e?.message); }
   try { result.neighbors = await discoverNeighbors(session); } catch {}
   try { result.power = await pollPower(session); } catch { result.power = null; }
   return result;
