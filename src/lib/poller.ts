@@ -229,30 +229,45 @@ export async function runPollCycle(): Promise<Snapshot> {
 }
 
 async function persistSwitchSnapshot(switchId: string, poll: PollResult, ports: PortSnapshot[], neighbors: NeighborSnapshot[]) {
-  for (const p of ports) {
-    const existing = await db.sfpPort.findFirst({ where: { switchId, ifIndex: p.ifIndex } });
-    const data = {
-      switchId, ifIndex: p.ifIndex, ifName: p.ifName, ifDescr: p.ifDescr, ifAlias: p.ifAlias,
-      ifSpeed: p.ifSpeed ? BigInt(p.ifSpeed.toString()) : null, ifOperStatus: p.ifOperStatus, ifAdminStatus: 1,
-      txPower: p.txPower, rxPower: p.rxPower, temperature: p.temperature, voltage: p.voltage, biasCurrent: p.biasCurrent,
-      txWarnLow: p.txWarnLow, txWarnHigh: p.txWarnHigh, txAlarmLow: p.txAlarmLow, txAlarmHigh: p.txAlarmHigh,
-      rxWarnLow: p.rxWarnLow, rxWarnHigh: p.rxWarnHigh, rxAlarmLow: p.rxAlarmLow, rxAlarmHigh: p.rxAlarmHigh,
-      inOctets: p.inOctets ? BigInt(p.inOctets.toString()) : null, outOctets: p.outOctets ? BigInt(p.outOctets.toString()) : null,
-      inHCOctets: p.inOctets ? BigInt(p.inOctets.toString()) : null, outHCOctets: p.outOctets ? BigInt(p.outOctets.toString()) : null,
-      inErrors: p.inErrors ? BigInt(p.inErrors.toString()) : null, outErrors: p.outErrors ? BigInt(p.outErrors.toString()) : null,
-      inBps: p.inBps, outBps: p.outBps, transceiverType: p.transceiverType, vendorName: p.vendorName,
-      partNumber: p.partNumber, serialNumber: p.serialNumber, isRingPort: p.isRingPort, remoteSwitchId: p.remoteSwitchId, lastPolledAt: new Date(),
-    };
-    if (existing) await db.sfpPort.update({ where: { id: existing.id }, data });
-    else await db.sfpPort.create({ data: { ...data, id: undefined } as any });
+  // Skip port persistence when switch is unreachable —
+  // otherwise we'd keep writing/updating rows with lastPolledAt but no real data.
+  if (poll.reachable && ports.length > 0) {
+    for (const p of ports) {
+      const existing = await db.sfpPort.findFirst({ where: { switchId, ifIndex: p.ifIndex } });
+      const data = {
+        switchId, ifIndex: p.ifIndex, ifName: p.ifName, ifDescr: p.ifDescr, ifAlias: p.ifAlias,
+        ifSpeed: p.ifSpeed ? BigInt(p.ifSpeed.toString()) : null, ifOperStatus: p.ifOperStatus, ifAdminStatus: 1,
+        txPower: p.txPower, rxPower: p.rxPower, temperature: p.temperature, voltage: p.voltage, biasCurrent: p.biasCurrent,
+        txWarnLow: p.txWarnLow, txWarnHigh: p.txWarnHigh, txAlarmLow: p.txAlarmLow, txAlarmHigh: p.txAlarmHigh,
+        rxWarnLow: p.rxWarnLow, rxWarnHigh: p.rxWarnHigh, rxAlarmLow: p.rxAlarmLow, rxAlarmHigh: p.rxAlarmHigh,
+        inOctets: p.inOctets ? BigInt(p.inOctets.toString()) : null, outOctets: p.outOctets ? BigInt(p.outOctets.toString()) : null,
+        inHCOctets: p.inOctets ? BigInt(p.inOctets.toString()) : null, outHCOctets: p.outOctets ? BigInt(p.outOctets.toString()) : null,
+        inErrors: p.inErrors ? BigInt(p.inErrors.toString()) : null, outErrors: p.outErrors ? BigInt(p.outErrors.toString()) : null,
+        inBps: p.inBps, outBps: p.outBps, transceiverType: p.transceiverType, vendorName: p.vendorName,
+        partNumber: p.partNumber, serialNumber: p.serialNumber, isRingPort: p.isRingPort, remoteSwitchId: p.remoteSwitchId, lastPolledAt: new Date(),
+      };
+      if (existing) await db.sfpPort.update({ where: { id: existing.id }, data });
+      else await db.sfpPort.create({ data: { ...data, id: undefined } as any });
+    }
   }
   await db.switch.update({ where: { id: switchId }, data: { status: poll.reachable ? "up" : "unreachable", lastSeen: poll.reachable ? new Date() : null } });
-  try {
-    await db.cdpNeighbor.deleteMany({ where: { switchId } });
-    if (neighbors.length > 0) {
-      await db.cdpNeighbor.createMany({ data: neighbors.map((n) => ({ switchId, localIfIndex: n.localIfIndex, localIfName: n.localIfName ?? null, deviceId: n.deviceId, devicePort: n.devicePort, address: n.address, platform: n.platform, protocol: n.protocol, matchedSwitchId: n.matchedSwitchId })) });
-    }
-  } catch {}
+
+  // Only persist CDP neighbors if the switch was actually polled via SNMP.
+  // Unreachable switches (mode === "simulate") return empty neighbors array, so
+  // deleting-then-recreating is a no-op here, but we skip it anyway to avoid churn.
+  if (poll.reachable) {
+    try {
+      await db.cdpNeighbor.deleteMany({ where: { switchId } });
+      if (neighbors.length > 0) {
+        await db.cdpNeighbor.createMany({ data: neighbors.map((n) => ({ switchId, localIfIndex: n.localIfIndex, localIfName: n.localIfName ?? null, deviceId: n.deviceId, devicePort: n.devicePort, address: n.address, platform: n.platform, protocol: n.protocol, matchedSwitchId: n.matchedSwitchId })) });
+      }
+    } catch {}
+  }
+
+  // Don't write Metric / PowerSupply rows for unreachable switches.
+  // Otherwise the metric table fills up with null rows every 30s.
+  if (!poll.reachable) return;
+
   const totalInBps = ports.reduce<number>((a, p) => a + (p.inBps ?? 0), 0);
   const totalOutBps = ports.reduce<number>((a, p) => a + (p.outBps ?? 0), 0);
   const minRx = ports.map((p) => p.rxPower).filter((v): v is number => v !== null).reduce<number | null>((m, v) => (m === null ? v : Math.min(m, v)), null);
