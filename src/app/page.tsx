@@ -1670,6 +1670,11 @@ function DomPortRow({ port }: { port: PortSnapshot }) {
             <Badge className="text-[9px] px-1 py-0 h-3.5 bg-crit/15 text-crit border-crit/30">DOWN</Badge>
           ) : null}
         </div>
+        {(port.ifDescr || port.ifAlias) && (
+          <div className="text-[10px] text-muted-foreground truncate">
+            {port.ifDescr}{port.ifAlias ? ` — ${port.ifAlias}` : ""}
+          </div>
+        )}
         {port.transceiverType && (
           <div className="text-[10px] text-muted-foreground truncate">{port.transceiverType}</div>
         )}
@@ -1946,7 +1951,11 @@ function AllInterfaces(props: {
                         <span className="font-mono">{port.ifName}</span>
                         {port.isRingPort && <Badge className="text-[9px] px-1 py-0 h-3.5 bg-primary/15 text-primary border-primary/30">RING</Badge>}
                       </div>
-                      {port.ifAlias && <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">{port.ifAlias}</div>}
+                      {(port.ifDescr || port.ifAlias) && (
+                        <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">
+                          {port.ifDescr}{port.ifAlias ? ` — ${port.ifAlias}` : ""}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span className={cn("font-medium", port.ifOperStatus === 1 ? "text-ok" : port.ifOperStatus === 2 ? "text-crit" : "text-muted-foreground")}>
@@ -3431,7 +3440,11 @@ function PortTable({ ports }: { ports: PortSnapshot[] }) {
                     <span className="font-mono">{p.ifName}</span>
                     {p.isRingPort && <Badge className="text-[9px] px-1 py-0 h-3.5 bg-primary/15 text-primary border-primary/30">RING</Badge>}
                   </div>
-                  {p.ifAlias && <div className="text-[10px] text-muted-foreground truncate max-w-[140px]">{p.ifAlias}</div>}
+                  {(p.ifDescr || p.ifAlias) && (
+                    <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
+                      {p.ifDescr}{p.ifAlias ? ` — ${p.ifAlias}` : ""}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <span className={cn("font-medium", p.ifOperStatus === 1 ? "text-ok" : p.ifOperStatus === 2 ? "text-crit" : "text-muted-foreground")}>
