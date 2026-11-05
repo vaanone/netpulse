@@ -102,10 +102,52 @@ export async function runPollCycle(): Promise<Snapshot> {
       let ringPortAutoDetected = false;
       let suggestedNextSwitchId: string | null = null, suggestedNextSwitchName: string | null = null, suggestedNextSwitchReason: string | null = null;
 
-      if (poll.mode === "simulate" && remoteSwitch && !neighborSnap.some((n) => n.matchedSwitchId === sw.nextSwitchId)) {
-        const ifIndex = poll.interfaces[0]?.ifIndex ?? 101;
-        const ifName = ifNameByIfIndex.get(ifIndex) ?? poll.interfaces[0]?.ifName ?? "Gi1/0/1";
-        neighborSnap.unshift({ localIfIndex: ifIndex, localIfName: ifName, deviceId: remoteSwitch.name, devicePort: "Gi1/0/1", address: remoteSwitch.ipAddress, platform: "Cisco IOS Software, Catalyst L3 Switch Software (SIMULATED)", protocol: "cdp", matchedSwitchId: remoteSwitch.id, matchedSwitchName: remoteSwitch.name, matchedSwitchIp: remoteSwitch.ipAddress });
+      // In simulation mode, inject CDP neighbors matching ALL other configured
+      // switches in the same ring. This makes auto-detect work properly.
+      if (poll.mode === "simulate") {
+        // Find other switches in the same ring
+        const sameRingSwitches = switches.filter(s =>
+          s.id !== sw.id && s.ringId === sw.ringId
+        );
+        // For each switch in the same ring, check if a CDP neighbor already matches
+        for (const otherSw of sameRingSwitches) {
+          const alreadyHas = neighborSnap.some(n => n.matchedSwitchId === otherSw.id);
+          if (!alreadyHas) {
+            // Inject a CDP neighbor on the next available SFP port
+            const portIdx = neighborSnap.length;
+            const ifIndex = 101 + portIdx;
+            const ifName = ifNameByIfIndex.get(ifIndex) ?? `Te1/0/${portIdx + 1}`;
+            neighborSnap.push({
+              localIfIndex: ifIndex, localIfName: ifName,
+              deviceId: otherSw.name, devicePort: "Te1/0/1",
+              address: otherSw.ipAddress,
+              platform: "Cisco IOS Software, Catalyst L3 Switch Software (SIMULATED)",
+              protocol: "cdp" as const,
+              matchedSwitchId: otherSw.id, matchedSwitchName: otherSw.name, matchedSwitchIp: otherSw.ipAddress,
+            });
+          }
+        }
+        // Also check switches in other rings (for cross-ring detection)
+        const otherRingSwitches = switches.filter(s =>
+          s.id !== sw.id && s.ringId !== sw.ringId
+        );
+        for (const otherSw of otherRingSwitches) {
+          const alreadyHas = neighborSnap.some(n => n.matchedSwitchId === otherSw.id);
+          if (!alreadyHas) {
+            const portIdx = neighborSnap.length;
+            if (portIdx >= 6) break; // Max 6 SFP ports
+            const ifIndex = 101 + portIdx;
+            const ifName = ifNameByIfIndex.get(ifIndex) ?? `Te1/0/${portIdx + 1}`;
+            neighborSnap.push({
+              localIfIndex: ifIndex, localIfName: ifName,
+              deviceId: otherSw.name, devicePort: "Te1/0/1",
+              address: otherSw.ipAddress,
+              platform: "Cisco IOS Software, Catalyst L3 Switch Software (SIMULATED)",
+              protocol: "cdp" as const,
+              matchedSwitchId: otherSw.id, matchedSwitchName: otherSw.name, matchedSwitchIp: otherSw.ipAddress,
+            });
+          }
+        }
       }
       if (sw.nextSwitchId) {
         const matchedToNext = neighborSnap.find((n) => n.matchedSwitchId === sw.nextSwitchId);
