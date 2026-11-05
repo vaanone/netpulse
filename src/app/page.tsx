@@ -666,6 +666,10 @@ export default function Home() {
               switches={switches}
               rows={switchesQ.data ?? []}
               onSwitchClick={(id) => setDetailSwitchId(id)}
+              onEdit={(row) => {
+                setDetailSwitchId(null);
+                queueMicrotask(() => { setEditingSwitch(row); setSwitchFormOpen(true); });
+              }}
               loading={switchesQ.isLoading}
             />
           </div>
@@ -1841,9 +1845,10 @@ function SwitchesList(props: {
   switches: SwitchSnapshot[];
   rows: SwitchRow[];
   onSwitchClick: (id: string) => void;
+  onEdit: (row: SwitchRow) => void;
   loading: boolean;
 }) {
-  const { switches, onSwitchClick, loading } = props;
+  const { switches, onSwitchClick, onEdit, loading } = props;
 
   return (
     <PanelCard id="switches" className="scroll-mt-24 py-4">
@@ -1866,9 +1871,17 @@ function SwitchesList(props: {
         ) : (
           <ScrollArea className="max-h-96">
             <div className="space-y-1.5 pr-2">
-              {switches.map((sw) => (
-                <SwitchListItem key={sw.switchId} sw={sw} onClick={() => onSwitchClick(sw.switchId)} />
-              ))}
+              {switches.map((sw) => {
+                const row = props.rows.find(r => r.id === sw.switchId);
+                return (
+                  <SwitchListItem
+                    key={sw.switchId}
+                    sw={sw}
+                    onClick={() => onSwitchClick(sw.switchId)}
+                    onEdit={row ? () => onEdit(row) : undefined}
+                  />
+                );
+              })}
             </div>
           </ScrollArea>
         )}
@@ -1877,33 +1890,46 @@ function SwitchesList(props: {
   );
 }
 
-function SwitchListItem({ sw, onClick }: { sw: SwitchSnapshot; onClick: () => void }) {
+function SwitchListItem({ sw, onClick, onEdit }: { sw: SwitchSnapshot; onClick: () => void; onEdit?: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left flex items-center gap-3 p-2.5 rounded-lg border border-border/60 hover:bg-accent/40 hover:border-primary/30 transition-colors"
-    >
-      <span className={cn("size-2 rounded-full shrink-0", statusDot(sw.status))} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium truncate">{sw.name}</span>
-          <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">SNMP {snmpVersionLabel(sw.snmpVersion)}</Badge>
-        </div>
-        <div className="text-[10px] text-muted-foreground font-mono truncate">{sw.ipAddress}</div>
-      </div>
-      <div className="text-right shrink-0">
-        <div className="text-[10px] text-muted-foreground">
-          {sw.ports.length} port{sw.ports.length !== 1 ? "s" : ""}
-        </div>
-        {sw.nextSwitchName ? (
-          <div className="text-[10px] text-muted-foreground flex items-center gap-0.5 justify-end">
-            <ArrowRight className="size-2.5" /> {sw.nextSwitchName}
+    <div className="flex items-center gap-2">
+      <button
+        onClick={onClick}
+        className="flex-1 text-left flex items-center gap-3 p-2.5 rounded-lg border border-border/60 hover:bg-accent/40 hover:border-primary/30 transition-colors"
+      >
+        <span className={cn("size-2 rounded-full shrink-0", statusDot(sw.status))} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium truncate">{sw.name}</span>
+            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">SNMP {snmpVersionLabel(sw.snmpVersion)}</Badge>
           </div>
-        ) : (
-          <div className="text-[10px] text-muted-foreground">no next</div>
-        )}
-      </div>
-    </button>
+          <div className="text-[10px] text-muted-foreground font-mono truncate">{sw.ipAddress}</div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-[10px] text-muted-foreground">
+            {sw.ports.length} port{sw.ports.length !== 1 ? "s" : ""}
+          </div>
+          {sw.nextSwitchName ? (
+            <div className="text-[10px] text-muted-foreground flex items-center gap-0.5 justify-end">
+              <ArrowRight className="size-2.5" /> {sw.nextSwitchName}
+            </div>
+          ) : (
+            <div className="text-[10px] text-muted-foreground">no next</div>
+          )}
+        </div>
+      </button>
+      {onEdit && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 shrink-0"
+          onClick={onEdit}
+          title="Edit switch (requires password)"
+        >
+          <Pencil className="size-3.5" />
+        </Button>
+      )}
+    </div>
   );
 }
 
