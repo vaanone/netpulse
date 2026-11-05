@@ -73,3 +73,539 @@ $ next dev -p 3000
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
 [snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
  GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 4ms, render: 5ms)
+ GET /api/metrics 200 in 26ms (compile: 23ms, render: 3ms)
+ GET / 200 in 63ms (compile: 5ms, render: 58ms)
+ GET / 200 in 55ms (compile: 4ms, render: 51ms)
+ GET /api/companies 200 in 10ms (compile: 4ms, render: 6ms)
+ GET /api/switches 200 in 8ms (compile: 4ms, render: 4ms)
+ GET /api/metrics 200 in 9ms (compile: 7ms, render: 3ms)
+ GET /api/rings 200 in 8ms (compile: 1696µs, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 4ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 3ms, render: 6ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/companies 200 in 9ms (compile: 4ms, render: 5ms)
+ GET /api/rings 200 in 6ms (compile: 1758µs, render: 4ms)
+ GET /api/switches 200 in 6ms (compile: 1688µs, render: 5ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/switches 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/companies 200 in 5ms (compile: 1670µs, render: 4ms)
+ GET /api/rings 200 in 12ms (compile: 6ms, render: 6ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/metrics 200 in 7ms (compile: 3ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/rings 200 in 8ms (compile: 2ms, render: 5ms)
+ GET /api/switches 200 in 6ms (compile: 1692µs, render: 4ms)
+ GET /api/companies 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 3ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/rings 200 in 10ms (compile: 2ms, render: 8ms)
+ GET /api/companies 200 in 11ms (compile: 6ms, render: 5ms)
+ GET /api/switches 200 in 5ms (compile: 1314µs, render: 4ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 37ms (compile: 33ms, render: 4ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/switches 200 in 9ms (compile: 2ms, render: 6ms)
+ GET /api/companies 200 in 11ms (compile: 2ms, render: 8ms)
+ GET /api/rings 200 in 11ms (compile: 7ms, render: 5ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 15ms (compile: 5ms, render: 11ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/switches 200 in 12ms (compile: 7ms, render: 5ms)
+ GET /api/companies 200 in 5ms (compile: 1567µs, render: 4ms)
+ GET /api/rings 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/switches 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/rings 200 in 7ms (compile: 1838µs, render: 5ms)
+ GET /api/companies 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 1946µs, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 6ms (compile: 3ms, render: 4ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 11ms (compile: 3ms, render: 8ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/switches 200 in 7ms (compile: 1611µs, render: 5ms)
+ GET /api/companies 200 in 5ms (compile: 1385µs, render: 4ms)
+ GET /api/rings 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 4ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 4ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/companies 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/rings 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/switches 200 in 7ms (compile: 1998µs, render: 5ms)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 1959µs, render: 4ms)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?limit=50 200 in 8ms (compile: 2ms, render: 5ms)
+ GET /api/switches/cmw38ftxt000cr9hwcy6h75az 200 in 565ms (compile: 543ms, render: 22ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 1896µs, render: 4ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/metrics 200 in 20ms (compile: 14ms, render: 6ms)
+ GET /api/companies 200 in 24ms (compile: 3ms, render: 22ms)
+ GET /api/rings 200 in 6ms (compile: 1412µs, render: 5ms)
+ GET /api/switches 200 in 5ms (compile: 1355µs, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/metrics 200 in 14ms (compile: 9ms, render: 5ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET / 200 in 93ms (compile: 4ms, render: 89ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?limit=50 200 in 9ms (compile: 3ms, render: 7ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 5ms (compile: 1487µs, render: 3ms)
+ GET /api/switches/cmw38ftxt000cr9hwcy6h75az 200 in 28ms (compile: 19ms, render: 9ms)
+ GET /api/rings 200 in 8ms (compile: 1946µs, render: 6ms)
+ GET /api/metrics 200 in 5ms (compile: 1777µs, render: 3ms)
+ GET /api/companies 200 in 44ms (compile: 1701µs, render: 42ms)
+ GET /api/switches 200 in 10ms (compile: 4ms, render: 6ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 1943µs, render: 4ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 2ms, render: 6ms)
+ GET /api/alerts?limit=50 200 in 7ms (compile: 2ms, render: 4ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/switches 200 in 9ms (compile: 2ms, render: 7ms)
+ GET /api/rings 200 in 10ms (compile: 5ms, render: 5ms)
+ GET /api/companies 200 in 7ms (compile: 1578µs, render: 5ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 1660µs, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/alerts?limit=50 200 in 7ms (compile: 2ms, render: 5ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/rings 200 in 11ms (compile: 3ms, render: 9ms)
+ GET /api/companies 200 in 12ms (compile: 6ms, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 3ms, render: 4ms)
+ GET /api/metrics 200 in 6ms (compile: 3ms, render: 2ms)
+ GET /api/switches/cmw38ftxt000cr9hwcy6h75az 200 in 35ms (compile: 22ms, render: 13ms)
+ GET /api/alerts?limit=50 200 in 8ms (compile: 1634µs, render: 6ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+ GET /api/switches 200 in 13ms (compile: 4ms, render: 9ms)
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
+[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB
