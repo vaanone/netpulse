@@ -227,18 +227,25 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
             if (promptMatch) {
               console.warn(`[ssh] ${config.host}: prompt detected — "${promptMatch[0].trim()}"`);
               promptReady = true;
-              // Send newline first to get a fresh prompt, then disable paging
+              // Send newline first to get a fresh prompt, then disable paging + echo
               stream.write("\n");
               setTimeout(() => {
+                // Disable paging
                 stream.write("terminal length 0\n");
                 setTimeout(() => {
                   stream.write("terminal datadump\n");
                   setTimeout(() => {
-                    // Start first command
-                    currentCmdIdx = 0;
-                    cmdSentForCurrent = true;
-                    collectedOutput = "";
-                    stream.write(commands[0] + "\n");
+                    // Try to disable character echo on SMB switches.
+                    // Standard IOS: "no terminal monitor" (not quite the same)
+                    // Cisco SMB: "no terminal echo" or just live with it
+                    stream.write("terminal no echo\n");
+                    setTimeout(() => {
+                      // Start first command
+                      currentCmdIdx = 0;
+                      cmdSentForCurrent = true;
+                      collectedOutput = "";
+                      stream.write(commands[0] + "\n");
+                    }, 200);
                   }, 200);
                 }, 200);
               }, 200);
@@ -248,7 +255,7 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
               // the banner is taking too long.
               console.warn(`[ssh] ${config.host}: no prompt detected after 8s, forcing command start. Buffer so far: ${JSON.stringify(buf.slice(-200))}`);
               promptReady = true;
-              stream.write("\nterminal length 0\nterminal datadump\n");
+              stream.write("\nterminal length 0\nterminal datadump\nterminal no echo\n");
               setTimeout(() => {
                 currentCmdIdx = 0;
                 cmdSentForCurrent = true;
@@ -699,6 +706,100 @@ function parseShowInterfacesDescription(output: string): Array<Partial<ParsedInt
  *   Platform: Cisco C1300,  Capabilities: Switch
  *   Interface: Gi1/0/1,  Port ID (outgoing port): Gi1/0/2
  */
+
+/**
+ * Parse Cisco SMB "show ports details" output.
+ * Format:
+ *                                            Flow    Link        Back   Mdix
+ * Port      Type         Duplex  Speed Neg   ctrl    State       Pressure Mode
+ * --------  ------------ ------  ----- -----  ----   ----------- -------- -------
+ * gi1       1G-Copper    Full    100   Enabled Off   Up          Disabled Off
+ * gi2       1G-Copper      --     --    --    --     Down          --     --
+ */
+function parseShowPortsDetails(output: string): Array<Partial<ParsedInterface>> {
+  const ports: Array<Partial<ParsedInterface>> = [];
+  const lines = output.split("\n");
+  let inTable = false;
+  for (const line of lines) {
+    // Detect table start — line containing "Port" and "Type" and "State"
+    if (/Port\s+Type\s+.*State/i.test(line) && !inTable) {
+      inTable = true;
+      continue;
+    }
+    if (inTable) {
+      // Skip separator lines like "-------- ------------ ------"
+      if (/^[-\s]+$/.test(line.trim())) continue;
+      // Skip empty lines
+      if (!line.trim()) continue;
+      // Try to match a port line: "gi1       1G-Copper    Full    100   Enabled  Off  Up          Disabled Off"
+      // Allow port names like: gi1, gi10, te1, te2, etc.
+      const m = line.match(/^(\w+)\s+(\S+)\s+(\S+)\s+(\S+)\s+\S+\s+\S+\s+(\S+)/);
+      if (m) {
+        const portName = m[1];
+        const type = m[2];
+        const duplex = m[3];
+        const speed = m[4];
+        const state = m[5];
+        // Only accept if it looks like a port (gi1, te1, Po1, etc.)
+        if (/^(gi|te|tw|fa|hu|fo|Po|Ch)/i.test(portName)) {
+          let operStatus = 4;  // unknown
+          if (state.toLowerCase() === "up") operStatus = 1;
+          else if (state.toLowerCase() === "down") operStatus = 2;
+          ports.push({
+            ifName: portName,
+            ifDescr: `${type} ${duplex} ${speed}M`,
+            ifAlias: "",  // descriptions come from a different command
+            ifOperStatus: operStatus,
+            ifAdminStatus: 1,
+            ifHighSpeed: speed === "--" ? null : (parseInt(speed) || null),
+          });
+        }
+      }
+    }
+  }
+  return ports;
+}
+
+/**
+ * Parse Cisco SMB "show ports description" output.
+ * Format:
+ * Port      Description
+ * -------   -----------
+ * gi1       Uplink to core
+ * gi2
+ */
+function parseShowPortsDescription(output: string): Array<Partial<ParsedInterface>> {
+  const ports: Array<Partial<ParsedInterface>> = [];
+  const lines = output.split("\n");
+  let inTable = false;
+  for (const line of lines) {
+    if (/Port\s+Description/i.test(line) && !inTable) {
+      inTable = true;
+      continue;
+    }
+    if (inTable) {
+      if (/^[-\s]+$/.test(line.trim())) continue;
+      if (!line.trim()) continue;
+      // Match: "gi1       Uplink to core" or just "gi1" with empty description
+      const m = line.match(/^(\w+)\s+(.*)$/);
+      if (m) {
+        const portName = m[1];
+        const description = m[2].trim();
+        if (/^(gi|te|tw|fa|hu|fo|Po|Ch)/i.test(portName)) {
+          ports.push({
+            ifName: portName,
+            ifDescr: portName,
+            ifAlias: description || "",
+            ifOperStatus: 4,  // unknown — show ports description doesn't have status
+            ifAdminStatus: 1,
+          });
+        }
+      }
+    }
+  }
+  return ports;
+}
+
 function parseShowCdpNeighbors(output: string, detail: boolean): CdpNeighbor[] {
   const neighbors: CdpNeighbor[] = [];
   if (detail) {
@@ -894,13 +995,16 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
 
   // Run all commands in ONE persistent SSH/telnet session (much faster than
   // opening a new connection per command, which causes handshake timeouts).
+  // Commands ordered with primary first, fallbacks after.
   const commands = [
     "show version",
     "show processes cpu",
     "show memory statistics",
     "show memory",                              // fallback if "statistics" not supported
-    "show interfaces status",
-    "show interfaces description",              // fallback for port names/descriptions
+    "show interfaces status",                    // standard IOS — usually fails on SMB
+    "show interfaces description",               // standard IOS — usually fails on SMB
+    "show ports details",                       // Cisco SMB (Catalyst 1000/1300/1400) — port status
+    "show ports description",                   // Cisco SMB — port descriptions
     "show cdp neighbors detail",
     "show cdp neighbors",                       // fallback if "detail" not supported
     "show lldp neighbors",
@@ -956,50 +1060,93 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     }
   }
 
-  // 4: show interfaces status (or 5: show interfaces description fallback)
-  const ifaceOut = outputs[4] || outputs[5];
-  if (ifaceOut) {
-    let ports = parseShowInterfacesStatus(outputs[4] || "");
-    if (ports.length === 0 && outputs[5]) {
-      ports = parseShowInterfacesDescription(outputs[5]);
-    }
-    let ifIndex = 1;
-    for (const p of ports) {
-      p.ifIndex = ifIndex++;
-      result.interfaces.push(p as any);
-    }
-    if (ports.length > 0) commandsRun++;
+  // 4-7: show interfaces status / show ports details (SMB)
+  // Try IOS first, then fall back to SMB "show ports details" format
+  let ports: any[] = [];
+  // Standard IOS: "show interfaces status" (output 4)
+  if (outputs[4] && !outputs[4].includes("% Unrecognized")) {
+    ports = parseShowInterfacesStatus(outputs[4]);
   }
+  // Standard IOS: "show interfaces description" (output 5) — for port descriptions
+  if (ports.length === 0 && outputs[5] && !outputs[5].includes("% Unrecognized")) {
+    ports = parseShowInterfacesDescription(outputs[5]);
+  }
+  // Cisco SMB: "show ports details" (output 6) — has Port, Type, Duplex, Speed, State
+  if (ports.length === 0 && outputs[6] && !outputs[6].includes("% Unrecognized")) {
+    ports = parseShowPortsDetails(outputs[6]);
+  }
+  // Cisco SMB: "show ports description" (output 7) — has Port + Description
+  if (ports.length === 0 && outputs[7] && !outputs[7].includes("% Unrecognized")) {
+    ports = parseShowPortsDescription(outputs[7]);
+  }
+  // Merge: if we got ports from status but no descriptions, try the description commands
+  if (ports.length > 0) {
+    // Try to enrich with descriptions
+    let descMap = new Map<string, string>();
+    if (outputs[5] && !outputs[5].includes("% Unrecognized")) {
+      // IOS description: parse from "show interfaces description"
+      // Format: Gi1/0/1   up    up   Uplink to core
+      for (const line of outputs[5].split("\n")) {
+        const m = line.match(/^(\S+)\s+\S+\s+\S+\s+(.+)$/);
+        if (m && m[1].match(/^(Gi|Te|Tw|Fa|Hu|Fo|gi|te|tw|fa|hu|fo)/i)) {
+          descMap.set(m[1].toLowerCase(), m[2].trim());
+        }
+      }
+    }
+    if (outputs[7] && !outputs[7].includes("% Unrecognized")) {
+      // SMB description: "show ports description"
+      // Format: gi1       <description>
+      for (const line of outputs[7].split("\n")) {
+        const m = line.match(/^(\S+)\s+(.+)$/);
+        if (m && m[1].match(/^(gi|te|tw|fa|hu|fo|po|ch)/i)) {
+          descMap.set(m[1].toLowerCase(), m[2].trim());
+        }
+      }
+    }
+    // Apply descriptions to ports
+    for (const p of ports) {
+      const ifNameLower = (p.ifName || "").toLowerCase();
+      if (descMap.has(ifNameLower) && !p.ifAlias) {
+        p.ifAlias = descMap.get(ifNameLower);
+      }
+    }
+  }
+  let ifIndex = 1;
+  for (const p of ports) {
+    p.ifIndex = ifIndex++;
+    result.interfaces.push(p as any);
+  }
+  if (ports.length > 0) commandsRun++;
 
-  // 6: show cdp neighbors detail (or 7: show cdp neighbors fallback)
-  const cdpOut = outputs[6] || outputs[7];
+  // 8: show cdp neighbors detail, 9: show cdp neighbors fallback
+  const cdpOut = outputs[8] || outputs[9];
   if (cdpOut) {
-    let cdp = parseShowCdpNeighbors(outputs[6] || "", true);
-    if (cdp.length === 0 && outputs[7]) {
-      cdp = parseShowCdpNeighbors(outputs[7], false);
+    let cdp = parseShowCdpNeighbors(outputs[8] || "", true);
+    if (cdp.length === 0 && outputs[9]) {
+      cdp = parseShowCdpNeighbors(outputs[9], false);
     }
     result.neighbors.push(...cdp);
     if (cdp.length > 0) commandsRun++;
   }
 
-  // 8: show lldp neighbors
-  if (outputs[8]) {
-    const lldp = parseShowLldpNeighbors(outputs[8]);
+  // 10: show lldp neighbors
+  if (outputs[10]) {
+    const lldp = parseShowLldpNeighbors(outputs[10]);
     result.neighbors.push(...lldp);
   }
 
-  // 9: show power inline
-  if (outputs[9]) {
-    const { totalPoeWatts } = parseShowPowerInline(outputs[9]);
+  // 11: show power inline
+  if (outputs[11]) {
+    const { totalPoeWatts } = parseShowPowerInline(outputs[11]);
     if (totalPoeWatts != null) {
       if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
       else { result.power.totalPoeWatts = totalPoeWatts; result.power.totalPoeMilliWatts = totalPoeWatts * 1000; }
     }
   }
 
-  // 10: show environment power
-  if (outputs[10]) {
-    const psus = parseShowEnvironmentPower(outputs[10]);
+  // 12: show environment power
+  if (outputs[12]) {
+    const psus = parseShowEnvironmentPower(outputs[12]);
     if (psus.length > 0) {
       if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
       else result.power.powerSupplies = psus;
