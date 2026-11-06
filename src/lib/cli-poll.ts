@@ -161,7 +161,10 @@ function runSshCommand(config: CliConfig, command: string): Promise<string> {
 async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const conn = new Client();
-    const timeoutMs = (config.timeout ?? 15000) * 2;  // give the whole batch 2x timeout
+    // Allow up to 90 seconds for the whole batch (idle timeout on switches is
+    // typically 60s, but as long as we keep sending commands the session stays
+    // active). 13 commands × ~3s each = ~40s, plus handshake + login ~10s.
+    const timeoutMs = 90000;
     const results: string[] = new Array(commands.length).fill("");
     let currentCmdIdx = 0;
     let collectedOutput = "";
@@ -996,13 +999,14 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   // Run all commands in ONE persistent SSH/telnet session (much faster than
   // opening a new connection per command, which causes handshake timeouts).
   // Commands ordered with primary first, fallbacks after.
+  // Note: We include both IOS and SMB commands because we don't know which
+  // firmware the switch has until we try. Failed commands return
+  // "% Unrecognized" which we filter out during parsing.
   const commands = [
     "show version",
     "show processes cpu",
     "show memory statistics",
     "show memory",                              // fallback if "statistics" not supported
-    "show interfaces status",                    // standard IOS — usually fails on SMB
-    "show interfaces description",               // standard IOS — usually fails on SMB
     "show ports details",                       // Cisco SMB (Catalyst 1000/1300/1400) — port status
     "show ports description",                   // Cisco SMB — port descriptions
     "show cdp neighbors detail",
@@ -1060,43 +1064,23 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     }
   }
 
-  // 4-7: show interfaces status / show ports details (SMB)
-  // Try IOS first, then fall back to SMB "show ports details" format
+  // 4: show ports details (Cisco SMB), 5: show ports description (Cisco SMB)
   let ports: any[] = [];
-  // Standard IOS: "show interfaces status" (output 4)
+  // Cisco SMB: "show ports details" (output 4) — has Port, Type, Duplex, Speed, State
   if (outputs[4] && !outputs[4].includes("% Unrecognized")) {
-    ports = parseShowInterfacesStatus(outputs[4]);
+    ports = parseShowPortsDetails(outputs[4]);
   }
-  // Standard IOS: "show interfaces description" (output 5) — for port descriptions
+  // Cisco SMB: "show ports description" (output 5) — has Port + Description
   if (ports.length === 0 && outputs[5] && !outputs[5].includes("% Unrecognized")) {
-    ports = parseShowInterfacesDescription(outputs[5]);
-  }
-  // Cisco SMB: "show ports details" (output 6) — has Port, Type, Duplex, Speed, State
-  if (ports.length === 0 && outputs[6] && !outputs[6].includes("% Unrecognized")) {
-    ports = parseShowPortsDetails(outputs[6]);
-  }
-  // Cisco SMB: "show ports description" (output 7) — has Port + Description
-  if (ports.length === 0 && outputs[7] && !outputs[7].includes("% Unrecognized")) {
-    ports = parseShowPortsDescription(outputs[7]);
+    ports = parseShowPortsDescription(outputs[5]);
   }
   // Merge: if we got ports from status but no descriptions, try the description commands
   if (ports.length > 0) {
-    // Try to enrich with descriptions
     let descMap = new Map<string, string>();
     if (outputs[5] && !outputs[5].includes("% Unrecognized")) {
-      // IOS description: parse from "show interfaces description"
-      // Format: Gi1/0/1   up    up   Uplink to core
-      for (const line of outputs[5].split("\n")) {
-        const m = line.match(/^(\S+)\s+\S+\s+\S+\s+(.+)$/);
-        if (m && m[1].match(/^(Gi|Te|Tw|Fa|Hu|Fo|gi|te|tw|fa|hu|fo)/i)) {
-          descMap.set(m[1].toLowerCase(), m[2].trim());
-        }
-      }
-    }
-    if (outputs[7] && !outputs[7].includes("% Unrecognized")) {
       // SMB description: "show ports description"
       // Format: gi1       <description>
-      for (const line of outputs[7].split("\n")) {
+      for (const line of outputs[5].split("\n")) {
         const m = line.match(/^(\S+)\s+(.+)$/);
         if (m && m[1].match(/^(gi|te|tw|fa|hu|fo|po|ch)/i)) {
           descMap.set(m[1].toLowerCase(), m[2].trim());
@@ -1118,35 +1102,35 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   }
   if (ports.length > 0) commandsRun++;
 
-  // 8: show cdp neighbors detail, 9: show cdp neighbors fallback
-  const cdpOut = outputs[8] || outputs[9];
+  // 6: show cdp neighbors detail, 7: show cdp neighbors fallback
+  const cdpOut = outputs[6] || outputs[7];
   if (cdpOut) {
-    let cdp = parseShowCdpNeighbors(outputs[8] || "", true);
-    if (cdp.length === 0 && outputs[9]) {
-      cdp = parseShowCdpNeighbors(outputs[9], false);
+    let cdp = parseShowCdpNeighbors(outputs[6] || "", true);
+    if (cdp.length === 0 && outputs[7]) {
+      cdp = parseShowCdpNeighbors(outputs[7], false);
     }
     result.neighbors.push(...cdp);
     if (cdp.length > 0) commandsRun++;
   }
 
-  // 10: show lldp neighbors
-  if (outputs[10]) {
-    const lldp = parseShowLldpNeighbors(outputs[10]);
+  // 8: show lldp neighbors
+  if (outputs[8]) {
+    const lldp = parseShowLldpNeighbors(outputs[8]);
     result.neighbors.push(...lldp);
   }
 
-  // 11: show power inline
-  if (outputs[11]) {
-    const { totalPoeWatts } = parseShowPowerInline(outputs[11]);
+  // 9: show power inline
+  if (outputs[9]) {
+    const { totalPoeWatts } = parseShowPowerInline(outputs[9]);
     if (totalPoeWatts != null) {
       if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
       else { result.power.totalPoeWatts = totalPoeWatts; result.power.totalPoeMilliWatts = totalPoeWatts * 1000; }
     }
   }
 
-  // 12: show environment power
-  if (outputs[12]) {
-    const psus = parseShowEnvironmentPower(outputs[12]);
+  // 10: show environment power
+  if (outputs[10]) {
+    const psus = parseShowEnvironmentPower(outputs[10]);
     if (psus.length > 0) {
       if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
       else result.power.powerSupplies = psus;
