@@ -217,6 +217,53 @@ function snmpSubtree(session: net_snmp.Session, oid: string): Promise<net_snmp.V
       }, { maxRepetitions: 20 });
   });
 }
+
+// Walk-based fetch — uses GETNEXT instead of GETBULK. Some Cisco SMB switches
+// (Catalyst 1000/1300/1400) only support GETNEXT for certain MIBs like CDP.
+// Used as a fallback when snmpSubtree returns 0 results.
+function snmpWalk(session: net_snmp.Session, oid: string): Promise<net_snmp.Varbind[]> {
+  return new Promise((resolve) => {
+    const results: net_snmp.Varbind[] = [];
+    const walkOid = oid;
+    let count = 0;
+    let lastOid: string | null = null;
+    let duplicate = 0;
+
+    const feedCb = (varbinds: net_snmp.Varbind[]) => {
+      for (const vb of varbinds) {
+        // Stop if OID is no longer under our base OID
+        if (!vb.oid.startsWith(walkOid + ".")) return false;
+        // Stop if we've seen the same OID (some buggy switches loop)
+        if (lastOid === vb.oid) { duplicate++; if (duplicate > 3) return false; }
+        else duplicate = 0;
+        lastOid = vb.oid;
+        results.push(vb);
+        count++;
+        if (count > 500) return false;  // safety limit
+      }
+      return true;  // continue walking
+    };
+    const doneCb = (err: any) => { resolve(results); };
+    try {
+      session.walk(walkOid, 20, feedCb, doneCb);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+// Try GETBULK (subtree) first, fall back to GETNEXT (walk) for SMB switches.
+// Returns combined unique varbinds.
+async function snmpFetch(session: net_snmp.Session, oid: string, label?: string): Promise<net_snmp.Varbind[]> {
+  let results = await snmpSubtree(session, oid);
+  if (results.length === 0) {
+    results = await snmpWalk(session, oid);
+    if (results.length > 0 && label) {
+      console.warn(`[snmp] ${label}: GETBULK returned 0 but GETNEXT found ${results.length} entries — switch is SMB-style`);
+    }
+  }
+  return results;
+}
 function asNumber(vb: net_snmp.Varbind): number | null {
   if (!vb || vb.value === null || vb.value === undefined) return null;
   const v = vb.value;
@@ -401,49 +448,77 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
 async function discoverNeighbors(session: net_snmp.Session): Promise<CdpNeighbor[]> {
   const neighbors: CdpNeighbor[] = [];
   const seen = new Set<string>();
+
+  // ─── CDP (CISCO-CDP-MIB) ───
+  // Use snmpFetch instead of snmpSubtree — it tries GETBULK first, falls back to
+  // GETNEXT walk for SMB switches (Catalyst 1000/1300/1400) that don't support
+  // GETBULK on the CDP cache table.
   try {
     const [devIdVars, devPortVars, addrVars, platVars] = await Promise.all([
-      snmpSubtree(session, OID.cdpCacheDeviceId), snmpSubtree(session, OID.cdpCacheDevicePort),
-      snmpSubtree(session, OID.cdpCacheAddress), snmpSubtree(session, OID.cdpCachePlatform),
+      snmpFetch(session, OID.cdpCacheDeviceId, "cdpCacheDeviceId"),
+      snmpFetch(session, OID.cdpCacheDevicePort, "cdpCacheDevicePort"),
+      snmpFetch(session, OID.cdpCacheAddress, "cdpCacheAddress"),
+      snmpFetch(session, OID.cdpCachePlatform, "cdpCachePlatform"),
     ]);
+    console.warn(`[snmp] CDP discovery: devId=${devIdVars.length} devPort=${devPortVars.length} addr=${addrVars.length} plat=${platVars.length}`);
+    if (devIdVars.length === 0) {
+      console.warn("[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.");
+    }
     for (const vb of devIdVars) {
+      // OID format: 1.3.6.1.4.1.9.9.23.1.2.1.1.6.<ifIndex>.<deviceIndex>
       const parts = vb.oid.split(".");
       if (parts.length < 2) continue;
       const localIfIndex = parseInt(parts[parts.length - 2], 10);
       const deviceId = asString(vb);
       if (!deviceId || !Number.isFinite(localIfIndex)) continue;
+      // Suffix is "<ifIndex>.<deviceIndex>" — used to match other CDP columns
       const portSuffix = parts.slice(-2).join(".");
-      const devicePort = devPortVars.find((p) => p.oid.endsWith("." + portSuffix)) ? (asString(devPortVars.find((p) => p.oid.endsWith("." + portSuffix))!) ?? "") : "";
+      const matchedPort = devPortVars.find((p) => p.oid.endsWith("." + portSuffix));
+      const devicePort = matchedPort ? (asString(matchedPort) ?? "") : "";
       const addrVb = addrVars.find((p) => p.oid.endsWith("." + portSuffix));
       const address = addrVb ? decodeCdpAddress(addrVb) : null;
-      const platform = platVars.find((p) => p.oid.endsWith("." + portSuffix)) ? asString(platVars.find((p) => p.oid.endsWith("." + portSuffix))!) : null;
+      const matchedPlat = platVars.find((p) => p.oid.endsWith("." + portSuffix));
+      const platform = matchedPlat ? asString(matchedPlat) : null;
       const dedup = `${localIfIndex}|${deviceId}|${devicePort}`;
       if (seen.has(dedup)) continue;
       seen.add(dedup);
       neighbors.push({ localIfIndex, deviceId, devicePort, address, platform, protocol: "cdp" });
     }
-  } catch {}
+  } catch (e: any) {
+    console.warn("[snmp] CDP discovery failed:", e?.message);
+  }
+
+  // ─── LLDP (LLDP-MIB) ───
+  // LLDP OID format: 1.3.6.1.2.1.105.1.7.1.<column>.<lldpRemPort>.<lldpRemIndex>
+  // Use snmpFetch with GETNEXT fallback too.
   try {
     const [sysNameVars, portDescVars, portIdVars] = await Promise.all([
-      snmpSubtree(session, OID.lldpRemSysName), snmpSubtree(session, OID.lldpRemPortDesc),
-      snmpSubtree(session, OID.lldpRemPortId),
+      snmpFetch(session, OID.lldpRemSysName, "lldpRemSysName"),
+      snmpFetch(session, OID.lldpRemPortDesc, "lldpRemPortDesc"),
+      snmpFetch(session, OID.lldpRemPortId, "lldpRemPortId"),
     ]);
+    console.warn(`[snmp] LLDP discovery: sysName=${sysNameVars.length} portDesc=${portDescVars.length} portId=${portIdVars.length}`);
     for (const vb of sysNameVars) {
+      // OID: 1.3.6.1.2.1.105.1.7.1.4.<port>.<idx>
       const parts = vb.oid.split(".");
       if (parts.length < 3) continue;
+      // Last 2 parts are <port>.<idx> — that's the unique neighbor key
       const localPortNum = parseInt(parts[parts.length - 2], 10);
       const deviceId = asString(vb);
       if (!deviceId || !Number.isFinite(localPortNum)) continue;
-      const suffix = parts.slice(-3).join(".");
-      const portVb = portDescVars.find((p) => p.oid.endsWith("." + suffix));
-      const portIdVb = portIdVars.find((p) => p.oid.endsWith("." + suffix));
+      // Build suffix from last 2 parts only (not 3 — bug was here)
+      const portSuffix = parts.slice(-2).join(".");
+      const portVb = portDescVars.find((p) => p.oid.endsWith("." + portSuffix));
+      const portIdVb = portIdVars.find((p) => p.oid.endsWith("." + portSuffix));
       const devicePort = portVb ? (asString(portVb) ?? "") : portIdVb ? (asString(portIdVb) ?? "") : "";
       const dedup = `${localPortNum}|${deviceId}|${devicePort}`;
       if (seen.has(dedup)) continue;
       seen.add(dedup);
       neighbors.push({ localIfIndex: localPortNum, deviceId, devicePort, address: null, platform: null, protocol: "lldp" });
     }
-  } catch {}
+  } catch (e: any) {
+    console.warn("[snmp] LLDP discovery failed:", e?.message);
+  }
   return neighbors;
 }
 

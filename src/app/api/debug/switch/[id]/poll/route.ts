@@ -72,6 +72,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (result.reachable && result.interfaces.length > 0 && result.interfaces.every((i: any) => i.ifName.startsWith("if"))) {
     diagnosis.push("ifName returned numbers — ifName OID (1.3.6.1.2.1.31.1.1.1.1) not supported on this switch. Falling back to ifDescr.");
   }
+  if (result.reachable && result.neighbors.length === 0) {
+    diagnosis.push("CDP/LLDP neighbors: 0 found. On the switch CLI:");
+    diagnosis.push("  - 'show cdp neighbors' should list devices (if empty, no CDP-capable neighbors are connected)");
+    diagnosis.push("  - 'show cdp' should show 'CDP is enabled'");
+    diagnosis.push("  - 'snmp-server community public RO' must allow read access to CISCO-CDP-MIB (1.3.6.1.4.1.9.9.23)");
+    diagnosis.push("  - For SMB switches (Catalyst 1300/1000): CDP MIB might be enabled by default but check 'show snmp mib | inc cdp'.");
+    diagnosis.push("  - LLDP alternative: 'lldp run' on CLI, then check 'show lldp neighbors'.");
+  }
 
   return NextResponse.json({
     summary,
