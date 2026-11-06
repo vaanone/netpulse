@@ -48,6 +48,12 @@ model Switch {
   v3AuthPassword  String?
   v3PrivProtocol  String?
   v3PrivPassword  String?
+  // SSH fallback — when SNMP returns no data, poller logs in via SSH
+  // and runs Cisco CLI commands to extract the same data.
+  sshEnabled      Boolean  @default(false)
+  sshUsername     String?
+  sshPassword     String?
+  sshPort         Int      @default(22)
   ringId          String?
   ring            Ring?    @relation(fields: [ringId], references: [id], onDelete: SetNull)
   nextSwitchId    String?  @unique

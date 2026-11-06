@@ -6,6 +6,7 @@
 
 import { db } from "@/lib/db";
 import { pollSwitch, simulateSwitch, type PollResult, type PowerSummary, type PowerSupply } from "@/lib/snmp";
+import { pollSwitchViaSsh } from "@/lib/ssh-poll";
 
 export interface PortSnapshot {
   switchId: string; switchName: string; switchIp: string; switchStatus: string;
@@ -73,7 +74,37 @@ export async function runPollCycle(): Promise<Snapshot> {
     const now = Date.now();
     const snapshots: SwitchSnapshot[] = [];
     const results = await Promise.allSettled(switches.map(async (sw) => {
-      try { return { sw, poll: await pollSwitch(sw) }; }
+      try {
+        let poll = await pollSwitch(sw);
+        // ─── SSH fallback ───
+        // If SNMP returned no useful data (unreachable, or reachable but all fields null),
+        // AND the switch has SSH enabled with credentials, try SSH polling.
+        const snmpHasData =
+          poll.reachable && (
+            poll.sysDescr != null || poll.uptimeSeconds != null ||
+            poll.cpuUsage != null || poll.memoryUsed != null ||
+            poll.interfaces.length > 0 || poll.neighbors.length > 0
+          );
+        if (!snmpHasData && sw.sshEnabled && sw.sshUsername && sw.sshPassword) {
+          console.warn(`[poller] ${sw.name}: SNMP returned no data, falling back to SSH (${sw.sshUsername}@${sw.ipAddress}:${sw.sshPort ?? 22})`);
+          try {
+            const sshResult = await pollSwitchViaSsh(sw);
+            if (sshResult && (sshResult.cpuUsage != null || sshResult.memoryUsed != null || sshResult.interfaces.length > 0 || sshResult.neighbors.length > 0)) {
+              // Mark as reachable so persistence code runs and writes to DB
+              sshResult.reachable = true;
+              sshResult.error = `SNMP failed — data fetched via SSH. ${sshResult.error ?? ""}`;
+              poll = sshResult;
+              console.warn(`[poller] ${sw.name}: SSH fallback succeeded — interfaces=${poll.interfaces.length} cpu=${poll.cpuUsage}`);
+            } else {
+              console.warn(`[poller] ${sw.name}: SSH fallback returned no data`);
+            }
+          } catch (e: any) {
+            console.warn(`[poller] ${sw.name}: SSH fallback failed: ${e?.message}`);
+            poll = simulateSwitch(sw, `SNMP timed out, SSH failed: ${e?.message ?? "unknown"}`);
+          }
+        }
+        return { sw, poll };
+      }
       catch (e: any) { return { sw, poll: simulateSwitch(sw, e?.message ?? "unknown error") }; }
     }));
     const switchById = new Map(switches.map((s) => [s.id, s]));

@@ -33,6 +33,10 @@ export async function POST(req: NextRequest) {
     v3SecurityLevel: body.v3SecurityLevel ?? null, v3Username: body.v3Username ?? null,
     v3AuthProtocol: body.v3AuthProtocol ?? null, v3AuthPassword: body.v3AuthPassword ?? null,
     v3PrivProtocol: body.v3PrivProtocol ?? null, v3PrivPassword: body.v3PrivPassword ?? null,
+    sshEnabled: Boolean(body.sshEnabled ?? false),
+    sshUsername: body.sshUsername ?? null,
+    sshPassword: body.sshPassword ?? null,
+    sshPort: Number(body.sshPort ?? 22),
     ringId,
   };
   if (nextId) {
