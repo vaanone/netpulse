@@ -34,9 +34,10 @@ export async function POST(req: NextRequest) {
     v3AuthProtocol: body.v3AuthProtocol ?? null, v3AuthPassword: body.v3AuthPassword ?? null,
     v3PrivProtocol: body.v3PrivProtocol ?? null, v3PrivPassword: body.v3PrivPassword ?? null,
     sshEnabled: Boolean(body.sshEnabled ?? false),
+    cliProtocol: body.cliProtocol === "telnet" ? "telnet" : "ssh",
     sshUsername: body.sshUsername ?? null,
     sshPassword: body.sshPassword ?? null,
-    sshPort: Number(body.sshPort ?? 22),
+    sshPort: Number(body.sshPort ?? (body.cliProtocol === "telnet" ? 23 : 22)),
     ringId,
   };
   if (nextId) {

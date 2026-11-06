@@ -132,7 +132,7 @@ interface SwitchRow {
   v3SecurityLevel?: string | null; v3Username?: string | null;
   v3AuthProtocol?: string | null; v3AuthPassword?: string | null;
   v3PrivProtocol?: string | null; v3PrivPassword?: string | null;
-  sshEnabled?: boolean; sshUsername?: string | null; sshPassword?: string | null; sshPort?: number;
+  sshEnabled?: boolean; cliProtocol?: "ssh" | "telnet" | string; sshUsername?: string | null; sshPassword?: string | null; sshPort?: number;
   ringId?: string | null; nextSwitchId?: string | null;
   status?: string; lastSeen?: string | null; pollingMode?: string;
   nextSwitch?: { id: string; name: string; ipAddress: string; snmpVersion: number } | null;
@@ -2571,8 +2571,9 @@ function SwitchFormDialog(props: {
   const [v3AuthPassword, setV3AuthPassword] = React.useState("");
   const [v3PrivProtocol, setV3PrivProtocol] = React.useState("AES");
   const [v3PrivPassword, setV3PrivPassword] = React.useState("");
-  // SSH fallback — used when SNMP returns no data (e.g. Catalyst 1300/1000 SMB)
+  // SSH/Telnet fallback — used when SNMP returns no data (e.g. Catalyst 1300/1000 SMB)
   const [sshEnabled, setSshEnabled] = React.useState(false);
+  const [cliProtocol, setCliProtocol] = React.useState<"ssh" | "telnet">("ssh");
   const [sshUsername, setSshUsername] = React.useState("");
   const [sshPassword, setSshPassword] = React.useState("");
   const [sshPort, setSshPort] = React.useState(22);
@@ -2649,9 +2650,10 @@ function SwitchFormDialog(props: {
         setV3PrivProtocol(editing.v3PrivProtocol ?? "AES");
         setV3PrivPassword(editing.v3PrivPassword ?? "");
         setSshEnabled(editing.sshEnabled ?? false);
+        setCliProtocol(editing.cliProtocol === "telnet" ? "telnet" : "ssh");
         setSshUsername(editing.sshUsername ?? "");
         setSshPassword(editing.sshPassword ?? "");
-        setSshPort(editing.sshPort ?? 22);
+        setSshPort(editing.sshPort ?? (editing.cliProtocol === "telnet" ? 23 : 22));
         setCompanyId(editing.ring?.company?.id ?? "");
         setRingId(editing.ringId ?? "");
         setNextSwitchId(editing.nextSwitchId ?? "");
@@ -2663,7 +2665,7 @@ function SwitchFormDialog(props: {
         setCommunity("public"); setSnmpPort(161); setV3SecurityLevel("authPriv");
         setV3Username(""); setV3AuthProtocol("SHA"); setV3AuthPassword("");
         setV3PrivProtocol("AES"); setV3PrivPassword("");
-        setSshEnabled(false); setSshUsername(""); setSshPassword(""); setSshPort(22);
+        setSshEnabled(false); setCliProtocol("ssh"); setSshUsername(""); setSshPassword(""); setSshPort(22);
         setCompanyId(""); setRingId(""); setNextSwitchId("");
         setShowInlineCompany(false); setShowInlineRing(false);
       });
@@ -2749,6 +2751,7 @@ function SwitchFormDialog(props: {
       v3PrivProtocol: snmpVersion === 3 ? v3PrivProtocol : null,
       v3PrivPassword: snmpVersion === 3 ? v3PrivPassword : null,
       sshEnabled,
+      cliProtocol,
       sshUsername: sshEnabled ? sshUsername : null,
       sshPassword: sshEnabled ? sshPassword : null,
       sshPort,
@@ -2928,47 +2931,87 @@ function SwitchFormDialog(props: {
             </Tabs>
           </div>
 
-          {/* SSH Fallback — used when SNMP returns no data (Catalyst 1300/1000 SMB) */}
+          {/* CLI Fallback (SSH/Telnet) — used when SNMP returns no data */}
           <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
             <div className="flex items-center justify-between">
               <Label className="flex items-center gap-1.5 text-xs">
                 <Terminal className="size-3.5" />
-                SSH Fallback
+                CLI Fallback
                 <span className="text-[10px] text-muted-foreground font-normal">
-                  (used when SNMP returns no data)
+                  (SSH or Telnet — used when SNMP returns no data)
                 </span>
               </Label>
               <input
                 type="checkbox"
                 checked={sshEnabled}
-                onChange={(e) => setSshEnabled(e.target.checked)}
+                onChange={(e) => {
+                  setSshEnabled(e.target.checked);
+                  // Auto-set port when protocol changes
+                  if (e.target.checked) setSshPort(cliProtocol === "telnet" ? 23 : 22);
+                }}
                 className="h-4 w-4 cursor-pointer"
               />
             </div>
             {sshEnabled && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Username</Label>
-                  <Input value={sshUsername} onChange={(e) => setSshUsername(e.target.value)} placeholder="admin" className="h-8 text-xs" />
+              <div className="space-y-2">
+                {/* Protocol selector */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setCliProtocol("ssh"); setSshPort(22); }}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs transition-colors",
+                      cliProtocol === "ssh"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:bg-muted/50 text-muted-foreground"
+                    )}
+                  >
+                    <Lock className="size-3" />
+                    SSH (port 22)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCliProtocol("telnet"); setSshPort(23); }}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs transition-colors",
+                      cliProtocol === "telnet"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:bg-muted/50 text-muted-foreground"
+                    )}
+                  >
+                    <Terminal className="size-3" />
+                    Telnet (port 23)
+                  </button>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Password</Label>
-                  <Input type="password" value={sshPassword} onChange={(e) => setSshPassword(e.target.value)} placeholder="•••••" className="h-8 text-xs" />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Username</Label>
+                    <Input value={sshUsername} onChange={(e) => setSshUsername(e.target.value)} placeholder="admin" className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Password</Label>
+                    <Input type="password" value={sshPassword} onChange={(e) => setSshPassword(e.target.value)} placeholder="•••••" className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Port</Label>
+                    <Input type="number" value={sshPort} onChange={(e) => setSshPort(Number(e.target.value) || (cliProtocol === "telnet" ? 23 : 22))} className="h-8 text-xs w-24" />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Port</Label>
-                  <Input type="number" value={sshPort} onChange={(e) => setSshPort(Number(e.target.value) || 22)} className="h-8 text-xs w-24" />
-                </div>
-                <div className="sm:col-span-3 text-[10px] text-muted-foreground">
-                  When SNMP fails or returns no data, NETPULSE will SSH into the switch
+                <div className="text-[10px] text-muted-foreground">
+                  When SNMP fails, NETPULSE will {cliProtocol === "telnet" ? "telnet" : "SSH"} into the switch
                   and run CLI commands (<code>show interfaces status</code>, <code>show cdp neighbors</code>,
                   <code> show processes cpu</code>, etc.) to gather the same data.
+                  {cliProtocol === "telnet" && (
+                    <span className="block mt-0.5 text-amber-600">
+                      ⚠ Telnet sends credentials in cleartext — use only on trusted local networks.
+                    </span>
+                  )}
                 </div>
               </div>
             )}
             {!sshEnabled && (
               <div className="text-[10px] text-muted-foreground">
-                Enable to log in via SSH and run CLI commands when SNMP polling fails
+                Enable to log in via SSH or Telnet and run CLI commands when SNMP polling fails
                 (recommended for Catalyst 1300/1000 SMB switches).
               </div>
             )}

@@ -48,9 +48,12 @@ model Switch {
   v3AuthPassword  String?
   v3PrivProtocol  String?
   v3PrivPassword  String?
-  // SSH fallback — when SNMP returns no data, poller logs in via SSH
+  // SSH/Telnet fallback — when SNMP returns no data, poller logs in via CLI
   // and runs Cisco CLI commands to extract the same data.
+  // cliProtocol: "ssh" (default) or "telnet" — many Catalyst SMB switches
+  // ship with telnet enabled by default.
   sshEnabled      Boolean  @default(false)
+  cliProtocol     String   @default("ssh")  // "ssh" | "telnet"
   sshUsername     String?
   sshPassword     String?
   sshPort         Int      @default(22)

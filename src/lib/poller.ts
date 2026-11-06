@@ -6,7 +6,7 @@
 
 import { db } from "@/lib/db";
 import { pollSwitch, simulateSwitch, type PollResult, type PowerSummary, type PowerSupply } from "@/lib/snmp";
-import { pollSwitchViaSsh } from "@/lib/ssh-poll";
+import { pollSwitchViaSsh } from "@/lib/cli-poll";
 
 export interface PortSnapshot {
   switchId: string; switchName: string; switchIp: string; switchStatus: string;

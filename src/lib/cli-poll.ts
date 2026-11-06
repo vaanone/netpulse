@@ -1,19 +1,27 @@
 /**
- * SSH-based Cisco switch polling — used as a fallback when SNMP returns no data.
+ * CLI-based Cisco switch polling — used as a fallback when SNMP returns no data.
  *
  * Many Cisco SMB switches (Catalyst 1000/1300/1400, SG/SE series) don't fully
  * support SNMP GETBULK on tables, or have SNMP views that restrict access to
- * IF-MIB / CISCO-CDP-MIB / CISCO-PROCESS-MIB. SSH CLI access always works.
+ * IF-MIB / CISCO-CDP-MIB / CISCO-PROCESS-MIB. CLI access (SSH or Telnet) always works.
  *
- * This module logs into the switch via SSH, runs Cisco IOS CLI commands, and
- * parses the output into the same shape as the SNMP PollResult.
+ * This module logs into the switch via SSH OR Telnet, runs Cisco IOS CLI commands,
+ * and parses the output into the same shape as the SNMP PollResult.
+ *
+ * Telnet is added because many Catalyst SMB switches ship with telnet enabled
+ * by default (and SSH not configured). Telnet also works on older IOS versions
+ * that don't support modern SSH crypto algorithms.
  */
 
 import { Client } from "ssh2";
+import { Telnet } from "telnet-client";
 import type { Switch as SwitchRow } from "@prisma/client";
 import type { PollResult, CdpNeighbor, PowerSupply, PowerSummary } from "./snmp";
 
-interface SshConfig {
+export type CliProtocol = "ssh" | "telnet";
+
+interface CliConfig {
+  protocol: CliProtocol;
   host: string;
   port: number;
   username: string;
@@ -22,7 +30,7 @@ interface SshConfig {
 }
 
 /** Run a single command on the switch via SSH. Returns the stdout string. */
-function runSshCommand(config: SshConfig, command: string): Promise<string> {
+function runSshCommand(config: CliConfig, command: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const conn = new Client();
     let output = "";
@@ -110,6 +118,70 @@ function runSshCommand(config: SshConfig, command: string): Promise<string> {
       },
     });
   });
+}
+
+/** Run a single command on the switch via Telnet. Returns the stdout string. */
+async function runTelnetCommand(config: CliConfig, command: string): Promise<string> {
+  const timeoutMs = config.timeout ?? 8000;
+  const conn = new Telnet();
+
+  // Connect + login
+  await conn.connect({
+    host: config.host,
+    port: config.port,
+    username: config.username,
+    password: config.password,
+    timeout: timeoutMs,
+    negotiationMandatory: true,
+    echoLines: 0,            // don't echo the commands back
+    irs: "\r\n",             // line separator from switch
+    ors: "\n",               // what we send as line terminator
+    wait: 500,               // wait between send and read
+    sendTimeout: timeoutMs,
+    maxBufferLength: 1024 * 1024,
+    // Cisco IOS prompts end with # or >
+    pageSeparator: /--\s*More\s*--/,
+    shellPrompt: /[a-zA-Z0-9-]+[>#]\s*$/,
+  });
+
+  try {
+    // Disable paging (try multiple variants — different IOS versions)
+    try {
+      await conn.exec("terminal length 0", { wait: 300, echoLines: 0 });
+    } catch {}
+    try {
+      await conn.exec("terminal datadump", { wait: 300, echoLines: 0 });
+    } catch {}
+
+    // Run the actual command
+    const result = await conn.exec(command, {
+      wait: 800,
+      echoLines: 0,
+      shellPrompt: /[a-zA-Z0-9-]+[>#]\s*$/,
+      timeout: timeoutMs,
+    });
+
+    // Strip the command echo line and any trailing prompt
+    const lines = String(result).split("\n").filter(l =>
+      !l.includes(command) &&
+      !/[a-zA-Z0-9-]+[>#]\s*$/.test(l.trim()) &&
+      !l.includes("terminal length") &&
+      !l.includes("terminal datadump") &&
+      l.trim() !== ""
+    );
+    return lines.join("\n");
+  } finally {
+    try { conn.end(); } catch {}
+    try { conn.destroy(); } catch {}
+  }
+}
+
+/** Dispatch to SSH or Telnet based on config.protocol. */
+async function runCliCommand(config: CliConfig, command: string): Promise<string> {
+  if (config.protocol === "telnet") {
+    return runTelnetCommand(config, command);
+  }
+  return runSshCommand(config, command);
 }
 
 /** Parse "show version" output. */
@@ -419,9 +491,13 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   if (!row.sshEnabled || !row.sshUsername || !row.sshPassword) {
     return null;
   }
-  const config: SshConfig = {
+  // Determine protocol — default SSH, but if cliProtocol field exists and is "telnet", use that
+  const protocol: CliProtocol = (row as any).cliProtocol === "telnet" ? "telnet" : "ssh";
+  const defaultPort = protocol === "telnet" ? 23 : 22;
+  const config: CliConfig = {
+    protocol,
     host: row.ipAddress,
-    port: row.sshPort ?? 22,
+    port: row.sshPort ?? defaultPort,
     username: row.sshUsername,
     password: row.sshPassword,
     timeout: 15000,
@@ -458,7 +534,7 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   // ─── show version (sysDescr, uptime) ───
   tasks.push((async () => {
     try {
-      const out = await runSshCommand(config, "show version");
+      const out = await runCliCommand(config, "show version");
       const parsed = parseShowVersion(out);
       Object.assign(result, parsed);
       commandsRun++;
@@ -471,7 +547,7 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   // ─── show processes cpu (cpuUsage) ───
   tasks.push((async () => {
     try {
-      const out = await runSshCommand(config, "show processes cpu");
+      const out = await runCliCommand(config, "show processes cpu");
       const cpu = parseShowCpu(out);
       if (cpu != null) result.cpuUsage = cpu;
       commandsRun++;
@@ -484,9 +560,9 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   // ─── show memory statistics (memoryUsed, memoryFree) ───
   tasks.push((async () => {
     try {
-      let out = await runSshCommand(config, "show memory statistics");
+      let out = await runCliCommand(config, "show memory statistics");
       if (!out || out.trim().length === 0) {
-        out = await runSshCommand(config, "show memory");
+        out = await runCliCommand(config, "show memory");
       }
       const mem = parseShowMemory(out);
       if (mem) {
@@ -503,11 +579,11 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   // ─── show interfaces status + description (port list) ───
   tasks.push((async () => {
     try {
-      const statusOut = await runSshCommand(config, "show interfaces status");
+      const statusOut = await runCliCommand(config, "show interfaces status");
       let ports = parseShowInterfacesStatus(statusOut);
       if (ports.length === 0) {
         // Fallback: try description
-        const descOut = await runSshCommand(config, "show interfaces description");
+        const descOut = await runCliCommand(config, "show interfaces description");
         ports = parseShowInterfacesDescription(descOut);
       }
       // Assign ifIndex sequentially (1, 2, 3, ...) since SSH doesn't expose ifIndex
@@ -526,10 +602,10 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   // ─── show cdp neighbors detail ───
   tasks.push((async () => {
     try {
-      const out = await runSshCommand(config, "show cdp neighbors detail");
+      const out = await runCliCommand(config, "show cdp neighbors detail");
       let cdp = parseShowCdpNeighbors(out, true);
       if (cdp.length === 0) {
-        const out2 = await runSshCommand(config, "show cdp neighbors");
+        const out2 = await runCliCommand(config, "show cdp neighbors");
         cdp = parseShowCdpNeighbors(out2, false);
       }
       result.neighbors.push(...cdp);
@@ -543,7 +619,7 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   // ─── show lldp neighbors ───
   tasks.push((async () => {
     try {
-      const out = await runSshCommand(config, "show lldp neighbors");
+      const out = await runCliCommand(config, "show lldp neighbors");
       const lldp = parseShowLldpNeighbors(out);
       result.neighbors.push(...lldp);
       commandsRun++;
@@ -556,7 +632,7 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   // ─── show power inline (PoE total) ───
   tasks.push((async () => {
     try {
-      const out = await runSshCommand(config, "show power inline");
+      const out = await runCliCommand(config, "show power inline");
       const { totalPoeWatts } = parseShowPowerInline(out);
       if (totalPoeWatts != null) {
         if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
@@ -572,7 +648,7 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
   // ─── show environment power (PSU status) ───
   tasks.push((async () => {
     try {
-      const out = await runSshCommand(config, "show environment power");
+      const out = await runCliCommand(config, "show environment power");
       const psus = parseShowEnvironmentPower(out);
       if (psus.length > 0) {
         if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
