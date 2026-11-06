@@ -73,3 +73,10 @@ $ next dev -p 3000
  GET /api/debug/switch/cmw38ftxq0008r9hwlqdpdg0c/cli-test 200 in 30.6s (compile: 540ms, render: 30.0s)
 [ssh] 10.10.1.11: ERROR — Timed out while waiting for handshake
  GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 7ms (compile: 3ms, render: 5ms)
+[poller] Mum-Core-01: SSH fallback returned no substantive data
+[ssh] 10.10.1.11: ERROR — Timed out while waiting for handshake
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/switches 200 in 8ms (compile: 3ms, render: 6ms)
+ GET /api/companies 200 in 6ms (compile: 1717µs, render: 4ms)
+ GET /api/rings 200 in 7ms (compile: 2ms, render: 5ms)
