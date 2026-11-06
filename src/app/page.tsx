@@ -2916,21 +2916,19 @@ function SwitchFormDialog(props: {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label>Nearby Switches (CDP/LLDP)</Label>
-              {!editing && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-[10px] gap-1"
-                  disabled={!ipAddress.trim() || detecting}
-                  onClick={handleDetect}
-                >
-                  {detecting ? (
-                    <><RefreshCw className="size-3 animate-spin" /> Detecting…</>
-                  ) : (
-                    <><Crosshair className="size-3" /> Auto-Detect</>
-                  )}
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] gap-1"
+                disabled={!ipAddress.trim() || detecting}
+                onClick={handleDetect}
+              >
+                {detecting ? (
+                  <><RefreshCw className="size-3 animate-spin" /> Detecting…</>
+                ) : (
+                  <><Crosshair className="size-3" /> Auto-Detect</>
+                )}
+              </Button>
             </div>
             {detectedNeighbors.length > 0 ? (
               <div className="rounded-md border border-primary/30 bg-primary/5 p-2 space-y-1">
