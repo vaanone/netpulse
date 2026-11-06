@@ -180,24 +180,57 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
         if (err) { clearTimeout(overallTimer); conn.end(); reject(err); return; }
         shellStream = stream;
         let buf = "";
+        let promptWaitStart = Date.now();
 
         stream.on("data", (data: Buffer) => {
           buf += data.toString("utf8");
+
+          // Log raw output for debugging (first 200 chars per data chunk)
+          const text = data.toString("utf8");
+          if (text.trim() && text.length < 500) {
+            console.warn(`[ssh] ${config.host} << ${JSON.stringify(text.slice(0, 100))}`);
+          }
+
           // Send paging-disable commands first, then our actual command
           if (!promptReady) {
-            if (/[>#]\s*$/.test(buf)) {
+            // Try various Cisco prompt patterns:
+            //   "Switch#" or "Switch>"   (standard)
+            //   "hostname#"               (with hostname)
+            //   "(enable)#"               (CatOS-style)
+            //   "Switch: "                (ROMMON)
+            //   End with # or > optionally followed by space
+            const promptMatch = buf.match(/[a-zA-Z0-9._-]*(\([^)]*\))?[>#]\s*$/);
+            if (promptMatch) {
+              console.warn(`[ssh] ${config.host}: prompt detected — "${promptMatch[0].trim()}"`);
               promptReady = true;
-              stream.write("terminal length 0\n");
+              // Send newline first to get a fresh prompt, then disable paging
+              stream.write("\n");
               setTimeout(() => {
-                stream.write("terminal datadump\n");
+                stream.write("terminal length 0\n");
                 setTimeout(() => {
-                  // Start first command
-                  currentCmdIdx = 0;
-                  cmdSentForCurrent = true;
-                  collectedOutput = "";
-                  stream.write(commands[0] + "\n");
+                  stream.write("terminal datadump\n");
+                  setTimeout(() => {
+                    // Start first command
+                    currentCmdIdx = 0;
+                    cmdSentForCurrent = true;
+                    collectedOutput = "";
+                    stream.write(commands[0] + "\n");
+                  }, 200);
                 }, 200);
               }, 200);
+            } else if (Date.now() - promptWaitStart > 5000 && !promptReady) {
+              // 5 seconds passed without detecting a prompt — maybe the prompt is unusual.
+              // Force-start commands anyway. The shell might just be at a blank line or
+              // the banner is taking too long.
+              console.warn(`[ssh] ${config.host}: no prompt detected after 5s, forcing command start. Buffer so far: ${JSON.stringify(buf.slice(-200))}`);
+              promptReady = true;
+              stream.write("\nterminal length 0\nterminal datadump\n");
+              setTimeout(() => {
+                currentCmdIdx = 0;
+                cmdSentForCurrent = true;
+                collectedOutput = "";
+                stream.write(commands[0] + "\n");
+              }, 500);
             }
             return;
           }
@@ -205,13 +238,21 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
           // We have a command in flight
           collectedOutput += data.toString("utf8");
 
-          // Check if we got the prompt back — command finished
-          if (/[>#]\s*$/.test(collectedOutput.slice(-50))) {
+          // Check if we got the prompt back — command finished.
+          // Match more loosely: any line ending in # or > (optionally followed by whitespace)
+          // OR a "--More--" prompt (which means paging wasn't disabled, send space to continue)
+          if (/--\s*[Mm]ore\s*--/.test(collectedOutput.slice(-20))) {
+            // Send space to page through (shouldn't happen but just in case)
+            stream.write(" ");
+            collectedOutput = collectedOutput.replace(/--\s*[Mm]ore\s*--\s*/, "");
+            return;
+          }
+          if (/[a-zA-Z0-9._-]*(\([^)]*\))?[>#]\s*$/.test(collectedOutput.slice(-100))) {
             // Strip command echo and trailing prompt
             const cmd = commands[currentCmdIdx];
             const lines = collectedOutput.split("\n").filter(l =>
               !l.includes(cmd) &&
-              !/[a-zA-Z0-9-]+[>#]\s*$/.test(l.trim()) &&
+              !/[a-zA-Z0-9._-]*(\([^)]*\))?[>#]\s*$/.test(l.trim()) &&
               !l.includes("terminal length") &&
               !l.includes("terminal datadump") &&
               l.trim() !== ""

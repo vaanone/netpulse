@@ -5,51 +5,16 @@ $ next dev -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 633ms
+✓ Ready in 624ms
 ○ Compiling / ...
- GET / 200 in 4.0s (compile: 3.7s, render: 297ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 64ms (compile: 47ms, render: 17ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 15ms (compile: 2ms, render: 12ms)
- GET /api/metrics 200 in 163ms (compile: 158ms, render: 5ms)
- GET /api/rings 200 in 150ms (compile: 57ms, render: 93ms)
- GET /api/companies 200 in 153ms (compile: 78ms, render: 75ms)
- GET /api/switches 200 in 159ms (compile: 129ms, render: 30ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 10ms (compile: 2ms, render: 8ms)
- GET /api/metrics 200 in 7ms (compile: 3ms, render: 4ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 3ms, render: 6ms)
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+ GET /api/metrics 200 in 3.4s (compile: 3.3s, render: 13ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 2.8s (compile: 2.6s, render: 216ms)
+ GET /api/rings 200 in 3.4s (compile: 3.2s, render: 191ms)
+ GET /api/companies 200 in 3.4s (compile: 3.3s, render: 175ms)
+ GET /api/switches 200 in 3.4s (compile: 3.3s, render: 50ms)
+ GET / 200 in 3.9s (compile: 3.6s, render: 303ms)
+ GET /api/metrics 200 in 17ms (compile: 13ms, render: 4ms)
+ GET /api/companies 200 in 21ms (compile: 4ms, render: 17ms)
+ GET /api/switches 200 in 23ms (compile: 9ms, render: 13ms)
+ GET /api/rings 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 4ms, render: 5ms)
