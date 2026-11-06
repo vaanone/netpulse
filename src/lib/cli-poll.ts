@@ -181,6 +181,7 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
         shellStream = stream;
         let buf = "";
         let promptWaitStart = Date.now();
+        let loginHandled = false;  // have we sent credentials in response to "User Name:" prompt?
 
         stream.on("data", (data: Buffer) => {
           buf += data.toString("utf8");
@@ -189,6 +190,29 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
           const text = data.toString("utf8");
           if (text.trim() && text.length < 500) {
             console.warn(`[ssh] ${config.host} << ${JSON.stringify(text.slice(0, 100))}`);
+          }
+
+          // ─── Handle post-SSH login prompts ───
+          // Some Catalyst SMB switches (1300/1000/1400) send a "User Name:" prompt
+          // AFTER SSH auth succeeds, requiring interactive login on the shell itself.
+          // We answer with the same credentials already provided.
+          if (!loginHandled) {
+            const lower = buf.toLowerCase();
+            // Match "User Name:" / "Username:" / "Login:" prompts (case-insensitive)
+            if (/user\s*name\s*:\s*$/.test(lower) || /username\s*:\s*$/.test(lower) || /login\s*:\s*$/.test(lower)) {
+              console.warn(`[ssh] ${config.host}: login prompt detected, sending username "${config.username}"`);
+              stream.write(config.username + "\n");
+              buf = "";  // clear buffer so we don't re-match
+              return;
+            }
+            // Match "Password:" prompt
+            if (/password\s*:\s*$/.test(lower)) {
+              console.warn(`[ssh] ${config.host}: password prompt detected, sending password`);
+              stream.write(config.password + "\n");
+              buf = "";
+              loginHandled = true;  // we've now handled both prompts
+              return;
+            }
           }
 
           // Send paging-disable commands first, then our actual command
@@ -218,11 +242,11 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
                   }, 200);
                 }, 200);
               }, 200);
-            } else if (Date.now() - promptWaitStart > 5000 && !promptReady) {
-              // 5 seconds passed without detecting a prompt — maybe the prompt is unusual.
+            } else if (Date.now() - promptWaitStart > 8000 && !promptReady) {
+              // 8 seconds passed without detecting a prompt — maybe the prompt is unusual.
               // Force-start commands anyway. The shell might just be at a blank line or
               // the banner is taking too long.
-              console.warn(`[ssh] ${config.host}: no prompt detected after 5s, forcing command start. Buffer so far: ${JSON.stringify(buf.slice(-200))}`);
+              console.warn(`[ssh] ${config.host}: no prompt detected after 8s, forcing command start. Buffer so far: ${JSON.stringify(buf.slice(-200))}`);
               promptReady = true;
               stream.write("\nterminal length 0\nterminal datadump\n");
               setTimeout(() => {
