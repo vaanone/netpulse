@@ -71,6 +71,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       ifAlias: i.ifAlias,
       ifOperStatus: i.ifOperStatus,
       ifAdminStatus: i.ifAdminStatus,
+      ifHighSpeed: i.ifHighSpeed,
+      // Convert BigInt counters to strings to avoid JSON serialization errors
+      ifSpeed: i.ifSpeed != null ? String(i.ifSpeed) : null,
+      ifInOctets: i.ifInOctets != null ? String(i.ifInOctets) : null,
+      ifOutOctets: i.ifOutOctets != null ? String(i.ifOutOctets) : null,
+      ifInErrors: i.ifInErrors != null ? String(i.ifInErrors) : null,
+      ifOutErrors: i.ifOutErrors != null ? String(i.ifOutErrors) : null,
     })),
     sampleNeighbors: result.neighbors.slice(0, 5),
     diagnosis: buildDiagnosis(result, proto),
