@@ -356,60 +356,165 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
   });
 }
 
-/** Run a single command on the switch via Telnet. Returns the stdout string. */
-async function runTelnetCommand(config: CliConfig, command: string): Promise<string> {
-  const timeoutMs = config.timeout ?? 8000;
-  const conn = new Telnet();
+/**
+ * Open ONE persistent Telnet session and run multiple commands.
+ * Handles "User Name:" / "Password:" login prompts that some Catalyst SMB
+ * switches (1300/1000/1400) send after the Telnet banner.
+ *
+ * Returns an array of strings — one per command, in the same order.
+ */
+async function runTelnetCommandsBatch(config: CliConfig, commands: string[]): Promise<string[]> {
+  const timeoutMs = (config.timeout ?? 15000) * 2;
+  const results: string[] = new Array(commands.length).fill("");
+  const net = await import("net");
 
-  // Connect + login
-  await conn.connect({
-    host: config.host,
-    port: config.port,
-    username: config.username,
-    password: config.password,
-    timeout: timeoutMs,
-    negotiationMandatory: true,
-    echoLines: 0,            // don't echo the commands back
-    irs: "\r\n",             // line separator from switch
-    ors: "\n",               // what we send as line terminator
-    wait: 500,               // wait between send and read
-    sendTimeout: timeoutMs,
-    maxBufferLength: 1024 * 1024,
-    // Cisco IOS prompts end with # or >
-    pageSeparator: /--\s*More\s*--/,
-    shellPrompt: /[a-zA-Z0-9-]+[>#]\s*$/,
-  });
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    const resultsLocal: string[] = new Array(commands.length).fill("");
+    let buf = "";
+    let currentCmdIdx = 0;
+    let promptReady = false;
+    let loginHandled = false;
+    let collectedOutput = "";
+    const startTime = Date.now();
 
-  try {
-    // Disable paging (try multiple variants — different IOS versions)
-    try {
-      await conn.exec("terminal length 0", { wait: 300, echoLines: 0 });
-    } catch {}
-    try {
-      await conn.exec("terminal datadump", { wait: 300, echoLines: 0 });
-    } catch {}
+    const overallTimer = setTimeout(() => {
+      try { socket.destroy(); } catch {}
+      console.warn(`[telnet] ${config.host}: batch timed out after ${timeoutMs}ms (${currentCmdIdx}/${commands.length} done)`);
+      resolve(resultsLocal);
+    }, timeoutMs);
 
-    // Run the actual command
-    const result = await conn.exec(command, {
-      wait: 800,
-      echoLines: 0,
-      shellPrompt: /[a-zA-Z0-9-]+[>#]\s*$/,
-      timeout: timeoutMs,
+    socket.on("connect", () => {
+      console.warn(`[telnet] ${config.host}: TCP connected, waiting for banner...`);
     });
 
-    // Strip the command echo line and any trailing prompt
-    const lines = String(result).split("\n").filter(l =>
-      !l.includes(command) &&
-      !/[a-zA-Z0-9-]+[>#]\s*$/.test(l.trim()) &&
-      !l.includes("terminal length") &&
-      !l.includes("terminal datadump") &&
-      l.trim() !== ""
-    );
-    return lines.join("\n");
-  } finally {
-    try { conn.end(); } catch {}
-    try { conn.destroy(); } catch {}
-  }
+    socket.on("data", (data: Buffer) => {
+      buf += data.toString("latin1");  // latin1 preserves bytes — important for telnet IAC
+
+      // Log raw output for debugging
+      const text = data.toString("utf8");
+      if (text.trim() && text.length < 500) {
+        console.warn(`[telnet] ${config.host} << ${JSON.stringify(text.slice(0, 100))}`);
+      }
+
+      const lower = buf.toLowerCase();
+
+      // ─── Handle login prompts ───
+      if (!loginHandled) {
+        if (/user\s*name\s*:\s*$/.test(lower) || /username\s*:\s*$/.test(lower) || /login\s*:\s*$/.test(lower)) {
+          console.warn(`[telnet] ${config.host}: login prompt detected, sending username "${config.username}"`);
+          socket.write(config.username + "\r\n");
+          buf = "";
+          return;
+        }
+        if (/password\s*:\s*$/.test(lower)) {
+          console.warn(`[telnet] ${config.host}: password prompt detected, sending password`);
+          socket.write(config.password + "\r\n");
+          buf = "";
+          loginHandled = true;
+          // Wait a bit for prompt to appear
+          setTimeout(() => {
+            if (!promptReady) {
+              console.warn(`[telnet] ${config.host}: post-login, sending newline to elicit prompt`);
+              socket.write("\r\n");
+            }
+          }, 1000);
+          return;
+        }
+      }
+
+      // ─── Detect prompt ───
+      if (!promptReady && loginHandled) {
+        // Match prompt patterns: "Switch#", "hostname>", "Switch(config)#", etc.
+        const promptMatch = buf.match(/[a-zA-Z0-9._-]*(\([^)]*\))?[>#]\s*$/);
+        if (promptMatch) {
+          console.warn(`[telnet] ${config.host}: prompt detected — "${promptMatch[0].trim()}"`);
+          promptReady = true;
+          // Disable paging
+          socket.write("terminal length 0\r\n");
+          setTimeout(() => {
+            socket.write("terminal datadump\r\n");
+            setTimeout(() => {
+              // Start first command
+              currentCmdIdx = 0;
+              collectedOutput = "";
+              socket.write(commands[0] + "\r\n");
+            }, 300);
+          }, 300);
+        } else if (Date.now() - startTime > 8000) {
+          // 8 seconds passed — force start
+          console.warn(`[telnet] ${config.host}: no prompt after 8s, force-starting. Buffer: ${JSON.stringify(buf.slice(-200))}`);
+          promptReady = true;
+          socket.write("\r\nterminal length 0\r\nterminal datadump\r\n");
+          setTimeout(() => {
+            currentCmdIdx = 0;
+            collectedOutput = "";
+            socket.write(commands[0] + "\r\n");
+          }, 500);
+        }
+        return;
+      }
+
+      // ─── We have a command in flight ───
+      if (promptReady) {
+        collectedOutput += data.toString("utf8");
+
+        // Handle paging prompts
+        if (/--\s*[Mm]ore\s*--/.test(collectedOutput.slice(-20))) {
+          socket.write(" ");
+          collectedOutput = collectedOutput.replace(/--\s*[Mm]ore\s*--\s*/, "");
+          return;
+        }
+
+        // Check if prompt came back — command finished
+        if (/[a-zA-Z0-9._-]*(\([^)]*\))?[>#]\s*$/.test(collectedOutput.slice(-100))) {
+          const cmd = commands[currentCmdIdx];
+          const lines = collectedOutput.split("\n").filter(l =>
+            !l.includes(cmd) &&
+            !/[a-zA-Z0-9._-]*(\([^)]*\))?[>#]\s*$/.test(l.trim()) &&
+            !l.includes("terminal length") &&
+            !l.includes("terminal datadump") &&
+            l.trim() !== ""
+          );
+          resultsLocal[currentCmdIdx] = lines.join("\n");
+          console.warn(`[telnet] ${config.host}: command ${currentCmdIdx + 1}/${commands.length} done (${resultsLocal[currentCmdIdx].length} bytes) — "${cmd.slice(0, 30)}"`);
+
+          currentCmdIdx++;
+          if (currentCmdIdx >= commands.length) {
+            clearTimeout(overallTimer);
+            try { socket.end(); } catch {}
+            resolve(resultsLocal);
+            return;
+          }
+          // Send next command
+          collectedOutput = "";
+          socket.write(commands[currentCmdIdx] + "\r\n");
+        }
+      }
+    });
+
+    socket.on("error", (err: any) => {
+      clearTimeout(overallTimer);
+      console.warn(`[telnet] ${config.host}: ERROR — ${err.message}`);
+      resolve(resultsLocal);
+    });
+
+    socket.on("close", () => {
+      clearTimeout(overallTimer);
+      console.warn(`[telnet] ${config.host}: connection closed (ran ${currentCmdIdx}/${commands.length})`);
+      resolve(resultsLocal);
+    });
+
+    // Connect
+    socket.connect(config.port, config.host);
+    // Set a connect timeout
+    socket.setTimeout(8000);
+    socket.on("timeout", () => {
+      console.warn(`[telnet] ${config.host}: socket timeout`);
+      // Don't destroy — let the overall timer handle it
+      socket.setTimeout(0);  // clear timeout
+    });
+  });
 }
 
 /** Dispatch to SSH or Telnet based on config.protocol. */
@@ -806,16 +911,8 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   let outputs: string[];
   try {
     if (config.protocol === "telnet") {
-      // Telnet — still uses per-command connections (telnet-client doesn't support batch well)
-      outputs = [];
-      for (const cmd of commands) {
-        try {
-          outputs.push(await runTelnetCommand(config, cmd));
-        } catch (e: any) {
-          console.warn(`[telnet] ${config.host}: "${cmd}" failed — ${e.message}`);
-          outputs.push("");
-        }
-      }
+      // Telnet — use the persistent-session batch method (one TCP connection for all commands)
+      outputs = await runTelnetCommandsBatch(config, commands);
     } else {
       // SSH — use the batch method (one connection for all commands)
       outputs = await runSshCommandsBatch(config, commands);
