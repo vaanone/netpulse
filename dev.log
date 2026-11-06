@@ -5,10 +5,12 @@ $ next dev -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 725ms
- GET /api/switches 200 in 401ms (compile: 367ms, render: 34ms)
- GET /api/debug/switch/cmw38ftxq0008r9hwlqdpdg0c/cli-test 200 in 659ms (compile: 640ms, render: 19ms)
- GET /api/switches 200 in 42ms (compile: 36ms, render: 6ms)
- GET /api/debug/switch/cmw38ftxq0008r9hwlqdpdg0c/cli-test 200 in 42ms (compile: 28ms, render: 14ms)
- GET /api/switches 200 in 45ms (compile: 38ms, render: 8ms)
- GET /api/debug/switch/cmw38ftxq0008r9hwlqdpdg0c/cli-test 200 in 15.1s (compile: 29ms, render: 15.0s)
+✓ Ready in 633ms
+○ Compiling / ...
+ GET / 200 in 4.0s (compile: 3.7s, render: 297ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 64ms (compile: 47ms, render: 17ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 15ms (compile: 2ms, render: 12ms)
+ GET /api/metrics 200 in 163ms (compile: 158ms, render: 5ms)
+ GET /api/rings 200 in 150ms (compile: 57ms, render: 93ms)
+ GET /api/companies 200 in 153ms (compile: 78ms, render: 75ms)
+ GET /api/switches 200 in 159ms (compile: 129ms, render: 30ms)

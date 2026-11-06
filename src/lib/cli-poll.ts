@@ -151,6 +151,146 @@ function runSshCommand(config: CliConfig, command: string): Promise<string> {
   });
 }
 
+/**
+ * Open ONE persistent SSH session and run multiple commands on the same shell.
+ * Much faster than opening a new SSH connection per command (which is what
+ * runSshCommand does). Use this when running the full poll cycle.
+ *
+ * Returns an array of strings — one per command, in the same order.
+ */
+async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const conn = new Client();
+    const timeoutMs = (config.timeout ?? 15000) * 2;  // give the whole batch 2x timeout
+    const results: string[] = new Array(commands.length).fill("");
+    let currentCmdIdx = 0;
+    let collectedOutput = "";
+    let cmdSentForCurrent = false;
+    let promptReady = false;
+    let shellStream: any = null;
+
+    const overallTimer = setTimeout(() => {
+      try { conn.end(); } catch {}
+      reject(new Error(`SSH batch timed out after ${timeoutMs}ms (ran ${currentCmdIdx}/${commands.length} commands)`));
+    }, timeoutMs);
+
+    conn.on("ready", () => {
+      console.warn(`[ssh] ${config.host}: connected, opening shell...`);
+      conn.shell((err, stream) => {
+        if (err) { clearTimeout(overallTimer); conn.end(); reject(err); return; }
+        shellStream = stream;
+        let buf = "";
+
+        stream.on("data", (data: Buffer) => {
+          buf += data.toString("utf8");
+          // Send paging-disable commands first, then our actual command
+          if (!promptReady) {
+            if (/[>#]\s*$/.test(buf)) {
+              promptReady = true;
+              stream.write("terminal length 0\n");
+              setTimeout(() => {
+                stream.write("terminal datadump\n");
+                setTimeout(() => {
+                  // Start first command
+                  currentCmdIdx = 0;
+                  cmdSentForCurrent = true;
+                  collectedOutput = "";
+                  stream.write(commands[0] + "\n");
+                }, 200);
+              }, 200);
+            }
+            return;
+          }
+
+          // We have a command in flight
+          collectedOutput += data.toString("utf8");
+
+          // Check if we got the prompt back — command finished
+          if (/[>#]\s*$/.test(collectedOutput.slice(-50))) {
+            // Strip command echo and trailing prompt
+            const cmd = commands[currentCmdIdx];
+            const lines = collectedOutput.split("\n").filter(l =>
+              !l.includes(cmd) &&
+              !/[a-zA-Z0-9-]+[>#]\s*$/.test(l.trim()) &&
+              !l.includes("terminal length") &&
+              !l.includes("terminal datadump") &&
+              l.trim() !== ""
+            );
+            results[currentCmdIdx] = lines.join("\n");
+            console.warn(`[ssh] ${config.host}: command ${currentCmdIdx + 1}/${commands.length} done (${results[currentCmdIdx].length} bytes) — "${cmd.slice(0, 30)}"`);
+
+            // Move to next command
+            currentCmdIdx++;
+            if (currentCmdIdx >= commands.length) {
+              // All done
+              clearTimeout(overallTimer);
+              try { stream.end(); } catch {}
+              try { conn.end(); } catch {}
+              resolve(results);
+              return;
+            }
+            // Send next command
+            cmdSentForCurrent = true;
+            collectedOutput = "";
+            stream.write(commands[currentCmdIdx] + "\n");
+          }
+        });
+        stream.stderr.on("data", () => { /* ignore */ });
+        stream.on("close", () => {
+          clearTimeout(overallTimer);
+          try { conn.end(); } catch {}
+          // Resolve with what we have so far
+          resolve(results);
+        });
+      });
+    });
+    conn.on("error", (err: any) => {
+      clearTimeout(overallTimer);
+      console.warn(`[ssh] ${config.host}: ERROR — ${err.message}`);
+      reject(err);
+    });
+    conn.on("handshake", (info: any) => {
+      console.warn(`[ssh] ${config.host}: handshake done — kex=${info?.kex}, cipher=${info?.cipher}, serverHostKey=${info?.serverHostKey}`);
+    });
+    conn.on("keyboard-interactive", (name: string, instructions: string, lang: string, prompts: Array<{ prompt: string; echo: boolean }>, finish: (answers: string[]) => void) => {
+      console.warn(`[ssh] ${config.host}: keyboard-interactive auth — prompts=${prompts.length}`);
+      finish(prompts.map(() => config.password));
+    });
+    conn.connect({
+      host: config.host,
+      port: config.port,
+      username: config.username,
+      password: config.password,
+      readyTimeout: timeoutMs,
+      algorithms: {
+        kex: [
+          "ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
+          "diffie-hellman-group14-sha256", "diffie-hellman-group14-sha1",
+          "diffie-hellman-group1-sha1",
+          "diffie-hellman-group-exchange-sha256", "diffie-hellman-group-exchange-sha1",
+        ],
+        serverHostKey: [
+          "ssh-rsa", "rsa-sha2-256", "rsa-sha2-512",
+          "ssh-ed25519", "ecdsa-sha2-nistp256",
+        ],
+        cipher: [
+          "aes128-ctr", "aes192-ctr", "aes256-ctr",
+          "aes128-gcm@openssh.com", "aes256-gcm@openssh.com",
+          "aes128-cbc", "aes256-cbc",
+          "3des-cbc",
+        ],
+        hmac: [
+          "hmac-sha2-256", "hmac-sha2-512",
+          "hmac-sha1", "hmac-md5",
+        ],
+        compress: ["none"],
+      },
+      tryKeyboard: true,
+      hostVerifier: () => true,
+    });
+  });
+}
+
 /** Run a single command on the switch via Telnet. Returns the stdout string. */
 async function runTelnetCommand(config: CliConfig, command: string): Promise<string> {
   const timeoutMs = config.timeout ?? 8000;
@@ -564,7 +704,7 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
 async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<PollResult | null> {
   const result: PollResult = {
     reachable: true,
-    mode: "snmp",  // treat SSH-pollled data the same as SNMP for downstream code
+    mode: "snmp",
     error: undefined,
     sysDescr: null,
     sysName: row.name,
@@ -582,145 +722,127 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     polledAt: new Date(),
   };
 
-  // Track SSH error to surface in error field
-  let sshError: string | null = null;
+  // Run all commands in ONE persistent SSH/telnet session (much faster than
+  // opening a new connection per command, which causes handshake timeouts).
+  const commands = [
+    "show version",
+    "show processes cpu",
+    "show memory statistics",
+    "show memory",                              // fallback if "statistics" not supported
+    "show interfaces status",
+    "show interfaces description",              // fallback for port names/descriptions
+    "show cdp neighbors detail",
+    "show cdp neighbors",                       // fallback if "detail" not supported
+    "show lldp neighbors",
+    "show power inline",
+    "show environment power",
+  ];
+
+  let outputs: string[];
+  try {
+    if (config.protocol === "telnet") {
+      // Telnet — still uses per-command connections (telnet-client doesn't support batch well)
+      outputs = [];
+      for (const cmd of commands) {
+        try {
+          outputs.push(await runTelnetCommand(config, cmd));
+        } catch (e: any) {
+          console.warn(`[telnet] ${config.host}: "${cmd}" failed — ${e.message}`);
+          outputs.push("");
+        }
+      }
+    } else {
+      // SSH — use the batch method (one connection for all commands)
+      outputs = await runSshCommandsBatch(config, commands);
+    }
+  } catch (e: any) {
+    // Whole batch failed — connection couldn't be established at all
+    return {
+      ...result,
+      reachable: false,
+      mode: "simulate",
+      error: `${config.protocol.toUpperCase()} connection failed: ${e.message}`,
+    };
+  }
+
+  // Parse each command's output
   let commandsRun = 0;
-  let commandsFailed = 0;
+  let sshError: string | null = null;
 
-  // Run commands in parallel where possible (each opens its own SSH session)
-  const tasks: Promise<void>[] = [];
+  // 0: show version
+  if (outputs[0]) {
+    const parsed = parseShowVersion(outputs[0]);
+    Object.assign(result, parsed);
+    if (result.sysDescr || result.uptimeSeconds) commandsRun++;
+    else sshError = "show version: didn't parse";
+  } else sshError = "show version: empty output";
 
-  // ─── show version (sysDescr, uptime) ───
-  tasks.push((async () => {
-    try {
-      const out = await runCliCommand(config, "show version");
-      const parsed = parseShowVersion(out);
-      Object.assign(result, parsed);
+  // 1: show processes cpu
+  if (outputs[1]) {
+    const cpu = parseShowCpu(outputs[1]);
+    if (cpu != null) { result.cpuUsage = cpu; commandsRun++; }
+  }
+
+  // 2: show memory statistics (or 3: show memory fallback)
+  const memOut = outputs[2] || outputs[3];
+  if (memOut) {
+    const mem = parseShowMemory(memOut);
+    if (mem) {
+      result.memoryUsed = mem.used;
+      result.memoryFree = mem.free;
       commandsRun++;
-    } catch (e: any) {
-      commandsFailed++;
-      sshError = `show version: ${e.message}`;
     }
-  })());
+  }
 
-  // ─── show processes cpu (cpuUsage) ───
-  tasks.push((async () => {
-    try {
-      const out = await runCliCommand(config, "show processes cpu");
-      const cpu = parseShowCpu(out);
-      if (cpu != null) result.cpuUsage = cpu;
-      commandsRun++;
-    } catch (e: any) {
-      commandsFailed++;
-      if (!sshError) sshError = `show processes cpu: ${e.message}`;
+  // 4: show interfaces status (or 5: show interfaces description fallback)
+  const ifaceOut = outputs[4] || outputs[5];
+  if (ifaceOut) {
+    let ports = parseShowInterfacesStatus(outputs[4] || "");
+    if (ports.length === 0 && outputs[5]) {
+      ports = parseShowInterfacesDescription(outputs[5]);
     }
-  })());
-
-  // ─── show memory statistics (memoryUsed, memoryFree) ───
-  tasks.push((async () => {
-    try {
-      let out = await runCliCommand(config, "show memory statistics");
-      if (!out || out.trim().length === 0) {
-        out = await runCliCommand(config, "show memory");
-      }
-      const mem = parseShowMemory(out);
-      if (mem) {
-        result.memoryUsed = mem.used;
-        result.memoryFree = mem.free;
-      }
-      commandsRun++;
-    } catch (e: any) {
-      commandsFailed++;
-      if (!sshError) sshError = `show memory: ${e.message}`;
+    let ifIndex = 1;
+    for (const p of ports) {
+      p.ifIndex = ifIndex++;
+      result.interfaces.push(p as any);
     }
-  })());
+    if (ports.length > 0) commandsRun++;
+  }
 
-  // ─── show interfaces status + description (port list) ───
-  tasks.push((async () => {
-    try {
-      const statusOut = await runCliCommand(config, "show interfaces status");
-      let ports = parseShowInterfacesStatus(statusOut);
-      if (ports.length === 0) {
-        // Fallback: try description
-        const descOut = await runCliCommand(config, "show interfaces description");
-        ports = parseShowInterfacesDescription(descOut);
-      }
-      // Assign ifIndex sequentially (1, 2, 3, ...) since SSH doesn't expose ifIndex
-      let ifIndex = 1;
-      for (const p of ports) {
-        p.ifIndex = ifIndex++;
-        result.interfaces.push(p as any);
-      }
-      commandsRun++;
-    } catch (e: any) {
-      commandsFailed++;
-      if (!sshError) sshError = `show interfaces: ${e.message}`;
+  // 6: show cdp neighbors detail (or 7: show cdp neighbors fallback)
+  const cdpOut = outputs[6] || outputs[7];
+  if (cdpOut) {
+    let cdp = parseShowCdpNeighbors(outputs[6] || "", true);
+    if (cdp.length === 0 && outputs[7]) {
+      cdp = parseShowCdpNeighbors(outputs[7], false);
     }
-  })());
+    result.neighbors.push(...cdp);
+    if (cdp.length > 0) commandsRun++;
+  }
 
-  // ─── show cdp neighbors detail ───
-  tasks.push((async () => {
-    try {
-      const out = await runCliCommand(config, "show cdp neighbors detail");
-      let cdp = parseShowCdpNeighbors(out, true);
-      if (cdp.length === 0) {
-        const out2 = await runCliCommand(config, "show cdp neighbors");
-        cdp = parseShowCdpNeighbors(out2, false);
-      }
-      result.neighbors.push(...cdp);
-      commandsRun++;
-    } catch (e: any) {
-      commandsFailed++;
-      // CDP not critical — don't overwrite other errors
+  // 8: show lldp neighbors
+  if (outputs[8]) {
+    const lldp = parseShowLldpNeighbors(outputs[8]);
+    result.neighbors.push(...lldp);
+  }
+
+  // 9: show power inline
+  if (outputs[9]) {
+    const { totalPoeWatts } = parseShowPowerInline(outputs[9]);
+    if (totalPoeWatts != null) {
+      if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
+      else { result.power.totalPoeWatts = totalPoeWatts; result.power.totalPoeMilliWatts = totalPoeWatts * 1000; }
     }
-  })());
+  }
 
-  // ─── show lldp neighbors ───
-  tasks.push((async () => {
-    try {
-      const out = await runCliCommand(config, "show lldp neighbors");
-      const lldp = parseShowLldpNeighbors(out);
-      result.neighbors.push(...lldp);
-      commandsRun++;
-    } catch (e: any) {
-      commandsFailed++;
-      // LLDP not critical
+  // 10: show environment power
+  if (outputs[10]) {
+    const psus = parseShowEnvironmentPower(outputs[10]);
+    if (psus.length > 0) {
+      if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
+      else result.power.powerSupplies = psus;
     }
-  })());
-
-  // ─── show power inline (PoE total) ───
-  tasks.push((async () => {
-    try {
-      const out = await runCliCommand(config, "show power inline");
-      const { totalPoeWatts } = parseShowPowerInline(out);
-      if (totalPoeWatts != null) {
-        if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
-        else { result.power.totalPoeWatts = totalPoeWatts; result.power.totalPoeMilliWatts = totalPoeWatts * 1000; }
-      }
-      commandsRun++;
-    } catch (e: any) {
-      commandsFailed++;
-      // PoE not critical
-    }
-  })());
-
-  // ─── show environment power (PSU status) ───
-  tasks.push((async () => {
-    try {
-      const out = await runCliCommand(config, "show environment power");
-      const psus = parseShowEnvironmentPower(out);
-      if (psus.length > 0) {
-        if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
-        else result.power.powerSupplies = psus;
-      }
-      commandsRun++;
-    } catch (e: any) {
-      commandsFailed++;
-      // PSU not critical
-    }
-  })());
-
-  await Promise.allSettled(tasks);
+  }
 
   // If we got no useful data at all, mark as unreachable
   const hasAnyData =
@@ -734,16 +856,16 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
       ...result,
       reachable: false,
       mode: "simulate",
-      error: sshError ?? "SSH connection succeeded but no data was collected",
+      error: sshError ?? `${config.protocol.toUpperCase()} connection succeeded but no data was parsed`,
     };
   }
 
   // If at least some commands worked, mark as reachable but include any error
   if (sshError) {
-    result.error = `Partial: ${commandsRun}/${commandsRun + commandsFailed} SSH commands succeeded. Last error: ${sshError}`;
+    result.error = `Partial: ${commandsRun}/${commands.length} commands succeeded. Last error: ${sshError}`;
   }
 
-  console.warn(`[ssh] ${row.name}: ${commandsRun} cmds OK, ${commandsFailed} failed. ` +
+  console.warn(`[${config.protocol}] ${row.name}: ${commandsRun}/${commands.length} cmds OK. ` +
                `interfaces=${result.interfaces.length} neighbors=${result.neighbors.length} cpu=${result.cpuUsage} mem=${result.memoryUsed}`);
   return result;
 }
