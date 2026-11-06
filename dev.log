@@ -5,13 +5,17 @@ $ next dev -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 631ms
+✓ Ready in 638ms
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 223ms (compile: 190ms, render: 33ms)
 ○ Compiling / ...
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 2.8s (compile: 2.7s, render: 67ms)
- GET / 200 in 3.6s (compile: 3.4s, render: 255ms)
- GET /api/rings 200 in 58ms (compile: 32ms, render: 26ms)
- GET /api/companies 200 in 51ms (compile: 40ms, render: 11ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 29ms (compile: 22ms, render: 6ms)
- GET /api/metrics 200 in 117ms (compile: 111ms, render: 5ms)
- GET /api/switches 200 in 141ms (compile: 131ms, render: 10ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 10ms (compile: 4ms, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 226ms (compile: 215ms, render: 10ms)
+ GET /api/rings 200 in 1875ms (compile: 1816ms, render: 59ms)
+ GET /api/companies 200 in 1806ms (compile: 1766ms, render: 40ms)
+ GET /api/switches 200 in 1938ms (compile: 1930ms, render: 8ms)
+ GET /api/metrics 200 in 249ms (compile: 244ms, render: 5ms)
+ GET / 200 in 4.4s (compile: 4.1s, render: 322ms)
+ GET /api/metrics 200 in 8ms (compile: 4ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 4ms)
+ GET /api/companies 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/switches 200 in 10ms (compile: 3ms, render: 7ms)
+ GET /api/rings 200 in 11ms (compile: 6ms, render: 5ms)

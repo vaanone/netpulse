@@ -292,11 +292,28 @@ function asNumber(vb: net_snmp.Varbind): number | null {
 }
 function asBigInt(vb: net_snmp.Varbind): bigint | null {
   if (!vb || vb.value === null || vb.value === undefined) return null;
-  const v = vb.value;
-  if (typeof v === "bigint") return v;
-  if (typeof v === "number") return BigInt(v);
-  if (Buffer.isBuffer(v)) return v.length === 8 ? v.readBigUInt64BE(0) : BigInt(v.readInt32BE(0));
-  return null;
+  try {
+    const v = vb.value;
+    if (typeof v === "bigint") return v;
+    if (typeof v === "number") return BigInt(v);
+    if (Buffer.isBuffer(v)) {
+      if (v.length === 0) return BigInt(0);
+      if (v.length === 8) return v.readBigUInt64BE(0);
+      if (v.length === 4) return BigInt(v.readUInt32BE(0));
+      // For other buffer lengths, read as a series of bytes — avoid the
+      // "Attempt to access memory outside buffer bounds" crash
+      let result = 0n;
+      for (let i = 0; i < v.length; i++) {
+        result = (result << 8n) | BigInt(v[i]);
+      }
+      return result;
+    }
+    return null;
+  } catch (e: any) {
+    // Buffer access failed — return null instead of crashing the whole poll
+    console.warn(`[snmp] asBigInt failed for OID ${vb.oid}: ${e?.message}`);
+    return null;
+  }
 }
 function asString(vb: net_snmp.Varbind): string | null {
   if (!vb || vb.value === null || vb.value === undefined) return null;
