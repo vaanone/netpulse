@@ -99,23 +99,54 @@ function runSshCommand(config: CliConfig, command: string): Promise<string> {
     });
     conn.on("error", (err: any) => { clearTimeout(timer); reject(err); });
     conn.on("end", () => { clearTimeout(timer); });
+    conn.on("handshake", (info: any) => {
+      console.warn(`[ssh] ${config.host}: handshake done — kex=${info?.kex}, cipher=${info?.cipher}, serverHostKey=${info?.serverHostKey}`);
+    });
+    conn.on("close", () => { clearTimeout(timer); });
+    // Handle keyboard-interactive auth (required by some IOS versions)
+    conn.on("keyboard-interactive", (name: string, instructions: string, lang: string, prompts: Array<{ prompt: string; echo: boolean }>, finish: (answers: string[]) => void) => {
+      console.warn(`[ssh] ${config.host}: keyboard-interactive auth requested — name="${name}", prompts=${prompts.length}`);
+      // Answer all prompts with the password
+      finish(prompts.map(() => config.password));
+    });
     conn.connect({
       host: config.host,
       port: config.port,
       username: config.username,
       password: config.password,
       readyTimeout: timeoutMs,
+      // Be very permissive with algorithms — Cisco SMB switches (Catalyst 1000/1300/1400)
+      // and older IOS versions often only support deprecated crypto.
       algorithms: {
-        // Allow older SSH algorithms — Cisco SMB switches often use older crypto
+        // Key exchange (KEX) — order matters: most-secure first, but include the
+        // legacy ones at the end so old switches can still negotiate.
         kex: [
           "ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
           "diffie-hellman-group14-sha256", "diffie-hellman-group14-sha1",
           "diffie-hellman-group1-sha1",
+          "diffie-hellman-group-exchange-sha256", "diffie-hellman-group-exchange-sha1",
         ],
         serverHostKey: [
-          "ssh-rsa", "ssh-ed25519", "ecdsa-sha2-nistp256", "rsa-sha2-256", "rsa-sha2-512",
+          "ssh-rsa", "rsa-sha2-256", "rsa-sha2-512",
+          "ssh-ed25519", "ecdsa-sha2-nistp256",
         ],
+        cipher: [
+          "aes128-ctr", "aes192-ctr", "aes256-ctr",
+          "aes128-gcm@openssh.com", "aes256-gcm@openssh.com",
+          "aes128-cbc", "aes256-cbc",
+          "3des-cbc",
+        ],
+        hmac: [
+          "hmac-sha2-256", "hmac-sha2-512",
+          "hmac-sha1", "hmac-md5",
+        ],
+        // Don't compress — switches don't support it
+        compress: ["none"],
       },
+      // Try keyboard-interactive auth if password auth fails (some IOS versions require it)
+      tryKeyboard: true,
+      // Allow weaker host key verification
+      hostVerifier: () => true,
     });
   });
 }
@@ -492,9 +523,9 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
     return null;
   }
   // Determine protocol — default SSH, but if cliProtocol field exists and is "telnet", use that
-  const protocol: CliProtocol = (row as any).cliProtocol === "telnet" ? "telnet" : "ssh";
-  const defaultPort = protocol === "telnet" ? 23 : 22;
-  const config: CliConfig = {
+  let protocol: CliProtocol = (row as any).cliProtocol === "telnet" ? "telnet" : "ssh";
+  let defaultPort = protocol === "telnet" ? 23 : 22;
+  let config: CliConfig = {
     protocol,
     host: row.ipAddress,
     port: row.sshPort ?? defaultPort,
@@ -503,6 +534,34 @@ export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | nul
     timeout: 15000,
   };
 
+  // First-attempt result. We may retry with the other protocol if this one fails.
+  let result = await tryPollWithConfig(config, row);
+  if (result && result.reachable && (result.cpuUsage != null || result.memoryUsed != null || result.interfaces.length > 0 || result.neighbors.length > 0)) {
+    return result;
+  }
+
+  // If the first protocol failed entirely AND user is using SSH (not telnet),
+  // automatically retry with Telnet — many Catalyst SMB switches have SSH misconfigured
+  // (missing RSA keys, old ciphers) but Telnet just works.
+  if (protocol === "ssh" && row.sshPort == null) {
+    console.warn(`[cli] ${row.ipAddress}: SSH failed (${result?.error ?? "no data"}), auto-retrying with Telnet on port 23`);
+    protocol = "telnet";
+    defaultPort = 23;
+    config = { ...config, protocol, port: defaultPort };
+    const retryResult = await tryPollWithConfig(config, row);
+    if (retryResult && (retryResult.cpuUsage != null || retryResult.memoryUsed != null || retryResult.interfaces.length > 0 || retryResult.neighbors.length > 0)) {
+      retryResult.error = `SSH failed — auto-fell back to Telnet. ${retryResult.error ?? ""}`;
+      return retryResult;
+    }
+    // Return whichever gave us more info
+    return retryResult ?? result;
+  }
+
+  return result;
+}
+
+/** Helper — runs the poller with the given config and returns the PollResult. */
+async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<PollResult | null> {
   const result: PollResult = {
     reachable: true,
     mode: "snmp",  // treat SSH-pollled data the same as SNMP for downstream code
