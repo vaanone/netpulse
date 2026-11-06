@@ -322,7 +322,23 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
     conn.on("error", (err: any) => {
       clearTimeout(overallTimer);
       console.warn(`[ssh] ${config.host}: ERROR — ${err.message}`);
-      reject(err);
+      // Don't reject if we already got partial results — return what we have
+      if (results.some(r => r.length > 0)) {
+        console.warn(`[ssh] ${config.host}: returning ${results.filter(r => r.length > 0).length}/${results.length} partial results`);
+        resolve(results);
+      } else {
+        reject(err);
+      }
+    });
+    conn.on("close", () => {
+      clearTimeout(overallTimer);
+      console.warn(`[ssh] ${config.host}: connection closed (got ${results.filter(r => r.length > 0).length}/${results.length} results)`);
+      // If we got at least some results, return them — don't reject
+      if (results.some(r => r.length > 0)) {
+        resolve(results);
+      } else {
+        reject(new Error("SSH connection closed before any command completed"));
+      }
     });
     conn.on("handshake", (info: any) => {
       console.warn(`[ssh] ${config.host}: handshake done — kex=${info?.kex}, cipher=${info?.cipher}, serverHostKey=${info?.serverHostKey}`);
@@ -337,6 +353,8 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
       username: config.username,
       password: config.password,
       readyTimeout: timeoutMs,
+      keepaliveInterval: 5000,    // send keepalive every 5s — prevents idle timeout
+      keepaliveCountMax: 3,        // allow 3 missed keepalives before disconnecting
       algorithms: {
         kex: [
           "ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
