@@ -77,30 +77,47 @@ export async function runPollCycle(): Promise<Snapshot> {
       try {
         let poll = await pollSwitch(sw);
         // ─── SSH fallback ───
-        // If SNMP returned no useful data (unreachable, or reachable but all fields null),
-        // AND the switch has SSH enabled with credentials, try SSH polling.
-        const snmpHasData =
+        // If SNMP returned none of the SUBSTANTIVE data (interfaces, CPU, memory, neighbors),
+        // AND the switch has CLI fallback enabled with credentials, try SSH/Telnet.
+        // NOTE: We intentionally exclude sysDescr/sysName/uptime from this check — those are
+        // scalar OIDs fetched via single GET, and they often work on SMB switches even when
+        // GETBULK/GETNEXT on tables (ifTable, cdpCacheTable, cpmCPUTable, etc.) does not.
+        // Without this exclusion, we'd never fall back to CLI because sysDescr always succeeds.
+        const snmpHasSubstantiveData =
           poll.reachable && (
-            poll.sysDescr != null || poll.uptimeSeconds != null ||
             poll.cpuUsage != null || poll.memoryUsed != null ||
             poll.interfaces.length > 0 || poll.neighbors.length > 0
           );
-        if (!snmpHasData && sw.sshEnabled && sw.sshUsername && sw.sshPassword) {
-          console.warn(`[poller] ${sw.name}: SNMP returned no data, falling back to SSH (${sw.sshUsername}@${sw.ipAddress}:${sw.sshPort ?? 22})`);
+        if (!snmpHasSubstantiveData && sw.sshEnabled && sw.sshUsername && sw.sshPassword) {
+          const proto = (sw as any).cliProtocol === "telnet" ? "telnet" : "ssh";
+          const port = sw.sshPort ?? (proto === "telnet" ? 23 : 22);
+          console.warn(`[poller] ${sw.name}: SNMP returned no substantive data (interfaces=${poll.interfaces.length}, cpu=${poll.cpuUsage}, mem=${poll.memoryUsed}), falling back to ${proto.toUpperCase()} (${sw.sshUsername}@${sw.ipAddress}:${port})`);
           try {
             const sshResult = await pollSwitchViaSsh(sw);
             if (sshResult && (sshResult.cpuUsage != null || sshResult.memoryUsed != null || sshResult.interfaces.length > 0 || sshResult.neighbors.length > 0)) {
+              // Preserve SNMP sysDescr/sysName/uptime since CLI equivalents might be less accurate
+              if (!sshResult.sysDescr && poll.sysDescr) sshResult.sysDescr = poll.sysDescr;
+              if (!sshResult.sysName && poll.sysName) sshResult.sysName = poll.sysName;
+              if (!sshResult.uptimeSeconds && poll.uptimeSeconds) sshResult.uptimeSeconds = poll.uptimeSeconds;
               // Mark as reachable so persistence code runs and writes to DB
               sshResult.reachable = true;
-              sshResult.error = `SNMP failed — data fetched via SSH. ${sshResult.error ?? ""}`;
+              sshResult.error = `SNMP partial — substantive data via ${proto.toUpperCase()}. ${sshResult.error ?? ""}`;
               poll = sshResult;
-              console.warn(`[poller] ${sw.name}: SSH fallback succeeded — interfaces=${poll.interfaces.length} cpu=${poll.cpuUsage}`);
+              console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} fallback succeeded — interfaces=${poll.interfaces.length} cpu=${poll.cpuUsage} neighbors=${poll.neighbors.length}`);
             } else {
-              console.warn(`[poller] ${sw.name}: SSH fallback returned no data`);
+              console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} fallback returned no substantive data`);
+              if (sshResult) {
+                // Preserve sysDescr/sysName from SNMP even if SSH failed
+                sshResult.sysDescr = sshResult.sysDescr ?? poll.sysDescr;
+                sshResult.sysName = sshResult.sysName ?? poll.sysName;
+                sshResult.uptimeSeconds = sshResult.uptimeSeconds ?? poll.uptimeSeconds;
+                poll = sshResult;
+              }
             }
           } catch (e: any) {
-            console.warn(`[poller] ${sw.name}: SSH fallback failed: ${e?.message}`);
-            poll = simulateSwitch(sw, `SNMP timed out, SSH failed: ${e?.message ?? "unknown"}`);
+            console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} fallback failed: ${e?.message}`);
+            // Keep the SNMP partial result — don't overwrite with simulate
+            poll.error = `SNMP partial, ${proto.toUpperCase()} failed: ${e?.message ?? "unknown"}`;
           }
         }
         return { sw, poll };
