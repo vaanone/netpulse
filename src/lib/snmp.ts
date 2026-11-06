@@ -218,38 +218,56 @@ function snmpSubtree(session: net_snmp.Session, oid: string): Promise<net_snmp.V
   });
 }
 
+// True GETNEXT-based walker — does NOT use GETBULK.
+// Required for Cisco SMB switches (Catalyst 1000/1300/1400) where GETBULK on
+// table walks returns 0 results even though the data exists. GETNEXT is
+// universally supported across SNMPv1/v2c/v3.
+function snmpGetNextWalk(session: net_snmp.Session, oid: string): Promise<net_snmp.Varbind[]> {
+  return new Promise((resolve) => {
+    const results: net_snmp.Varbind[] = [];
+    let currentOid = oid;
+    let safety = 0;
+    const SAFETY_LIMIT = 2000;  // prevent infinite loops
+
+    const getNext = () => {
+      if (safety++ > SAFETY_LIMIT) {
+        console.warn(`[snmp] GETNEXT walk safety limit hit at ${results.length} entries for ${oid}`);
+        resolve(results);
+        return;
+      }
+      session.getNext([currentOid], (err, varbinds) => {
+        if (err) {
+          // Most common: "No such name" — means we walked past the subtree
+          resolve(results);
+          return;
+        }
+        if (!varbinds || varbinds.length === 0) {
+          resolve(results);
+          return;
+        }
+        const vb = varbinds[0];
+        // Check if we're still within our OID subtree
+        // (vb.oid must start with our base OID followed by ".")
+        if (vb.oid.startsWith(oid + ".") || vb.oid === oid) {
+          results.push(vb);
+          currentOid = vb.oid;
+          // Continue walking
+          setImmediate(getNext);  // avoid stack overflow on large walks
+        } else {
+          // Walked past the subtree — done
+          resolve(results);
+        }
+      });
+    };
+    getNext();
+  });
+}
+
 // Walk-based fetch — uses GETNEXT instead of GETBULK. Some Cisco SMB switches
 // (Catalyst 1000/1300/1400) only support GETNEXT for certain MIBs like CDP.
 // Used as a fallback when snmpSubtree returns 0 results.
 function snmpWalk(session: net_snmp.Session, oid: string): Promise<net_snmp.Varbind[]> {
-  return new Promise((resolve) => {
-    const results: net_snmp.Varbind[] = [];
-    const walkOid = oid;
-    let count = 0;
-    let lastOid: string | null = null;
-    let duplicate = 0;
-
-    const feedCb = (varbinds: net_snmp.Varbind[]) => {
-      for (const vb of varbinds) {
-        // Stop if OID is no longer under our base OID
-        if (!vb.oid.startsWith(walkOid + ".")) return false;
-        // Stop if we've seen the same OID (some buggy switches loop)
-        if (lastOid === vb.oid) { duplicate++; if (duplicate > 3) return false; }
-        else duplicate = 0;
-        lastOid = vb.oid;
-        results.push(vb);
-        count++;
-        if (count > 500) return false;  // safety limit
-      }
-      return true;  // continue walking
-    };
-    const doneCb = (err: any) => { resolve(results); };
-    try {
-      session.walk(walkOid, 20, feedCb, doneCb);
-    } catch {
-      resolve([]);
-    }
-  });
+  return snmpGetNextWalk(session, oid);
 }
 
 // Try GETBULK (subtree) first, fall back to GETNEXT (walk) for SMB switches.
@@ -257,9 +275,9 @@ function snmpWalk(session: net_snmp.Session, oid: string): Promise<net_snmp.Varb
 async function snmpFetch(session: net_snmp.Session, oid: string, label?: string): Promise<net_snmp.Varbind[]> {
   let results = await snmpSubtree(session, oid);
   if (results.length === 0) {
-    results = await snmpWalk(session, oid);
+    results = await snmpGetNextWalk(session, oid);
     if (results.length > 0 && label) {
-      console.warn(`[snmp] ${label}: GETBULK returned 0 but GETNEXT found ${results.length} entries — switch is SMB-style`);
+      console.warn(`[snmp] ${label}: GETBULK returned 0 but GETNEXT found ${results.length} entries — switch does not support GETBULK on this MIB`);
     }
   }
   return results;
@@ -345,10 +363,11 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
   // For SMB switches (Catalyst 1000/1300/1400, SG/SE series), CISCO-PROCESS-MIB is NOT supported;
   // they use the rlCpuUsage OID from the legacy Linksys/SMB MIB tree (1.3.6.1.4.1.9.6.1.101.x).
   try {
-    let cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5minRev);
-    if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal1minRev);
-    if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5secRev);
-    if (cpuVars.length === 0) cpuVars = await snmpSubtree(session, OID.cpmCPUTotal5sec);
+    // Use snmpFetch (GETBULK→GETNEXT fallback) — SMB switches don't support GETBULK
+    let cpuVars = await snmpFetch(session, OID.cpmCPUTotal5minRev, "cpmCPUTotal5minRev");
+    if (cpuVars.length === 0) cpuVars = await snmpFetch(session, OID.cpmCPUTotal1minRev, "cpmCPUTotal1minRev");
+    if (cpuVars.length === 0) cpuVars = await snmpFetch(session, OID.cpmCPUTotal5secRev, "cpmCPUTotal5secRev");
+    if (cpuVars.length === 0) cpuVars = await snmpFetch(session, OID.cpmCPUTotal5sec, "cpmCPUTotal5sec");
     if (cpuVars.length > 0) {
       const v = asNumber(cpuVars[0]);
       if (v !== null) result.cpuUsage = v;
@@ -372,9 +391,10 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
   // Memory — ciscoMemoryPoolUsed/Free (CISCO-MEMORY-POOL-MIB) for classic IOS.
   // For SMB switches (Catalyst 1000/1300/1400, SG/SE) — falls back to rlMemoryPoolTotal/Free.
   try {
+    // Use snmpFetch (GETBULK→GETNEXT fallback) for the table OIDs
     const [usedVars, freeVars] = await Promise.all([
-      snmpSubtree(session, OID.ciscoMemoryPoolUsed),
-      snmpSubtree(session, OID.ciscoMemoryPoolFree),
+      snmpFetch(session, OID.ciscoMemoryPoolUsed, "ciscoMemoryPoolUsed"),
+      snmpFetch(session, OID.ciscoMemoryPoolFree, "ciscoMemoryPoolFree"),
     ]);
     let memUsed = 0, memFree = 0;
     for (const vb of usedVars) { const v = asNumber(vb); if (v !== null) memUsed += v; }
@@ -397,17 +417,28 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
   } catch (e: any) { console.warn("[snmp] Memory poll failed:", e?.message); }
   // Interfaces — use Promise.allSettled so a single failed OID (e.g. ifHCInOctets
   // on a 32-bit-only counter, or ifAlias not configured) does NOT kill the whole batch.
+  // Use snmpFetch (GETBULK→GETNEXT fallback) — SMB switches (Catalyst 1300/1000) don't
+  // support GETBULK on table walks, so GETNEXT is the universal fallback.
   try {
     const settled = await Promise.allSettled([
-      snmpSubtree(session, OID.ifIndex), snmpSubtree(session, OID.ifDescr),
-      snmpSubtree(session, OID.ifName), snmpSubtree(session, OID.ifAlias),
-      snmpSubtree(session, OID.ifSpeed), snmpSubtree(session, OID.ifHighSpeed),
-      snmpSubtree(session, OID.ifOperStatus), snmpSubtree(session, OID.ifAdminStatus),
-      snmpSubtree(session, OID.ifInOctets), snmpSubtree(session, OID.ifOutOctets),
-      snmpSubtree(session, OID.ifHCInOctets), snmpSubtree(session, OID.ifHCOutOctets),
-      snmpSubtree(session, OID.ifInErrors), snmpSubtree(session, OID.ifOutErrors),
-      snmpSubtree(session, OID.ifInDiscards), snmpSubtree(session, OID.ifOutDiscards),
-      snmpSubtree(session, OID.ifInUcastPkts), snmpSubtree(session, OID.ifOutUcastPkts),
+      snmpFetch(session, OID.ifIndex, "ifIndex"),
+      snmpFetch(session, OID.ifDescr, "ifDescr"),
+      snmpFetch(session, OID.ifName, "ifName"),
+      snmpFetch(session, OID.ifAlias, "ifAlias"),
+      snmpFetch(session, OID.ifSpeed, "ifSpeed"),
+      snmpFetch(session, OID.ifHighSpeed, "ifHighSpeed"),
+      snmpFetch(session, OID.ifOperStatus, "ifOperStatus"),
+      snmpFetch(session, OID.ifAdminStatus, "ifAdminStatus"),
+      snmpFetch(session, OID.ifInOctets, "ifInOctets"),
+      snmpFetch(session, OID.ifOutOctets, "ifOutOctets"),
+      snmpFetch(session, OID.ifHCInOctets, "ifHCInOctets"),
+      snmpFetch(session, OID.ifHCOutOctets, "ifHCOutOctets"),
+      snmpFetch(session, OID.ifInErrors, "ifInErrors"),
+      snmpFetch(session, OID.ifOutErrors, "ifOutErrors"),
+      snmpFetch(session, OID.ifInDiscards, "ifInDiscards"),
+      snmpFetch(session, OID.ifOutDiscards, "ifOutDiscards"),
+      snmpFetch(session, OID.ifInUcastPkts, "ifInUcastPkts"),
+      snmpFetch(session, OID.ifOutUcastPkts, "ifOutUcastPkts"),
     ]);
     const got = (i: number): net_snmp.Varbind[] =>
       settled[i].status === "fulfilled" ? settled[i].value : [];
@@ -416,9 +447,10 @@ async function pollRealSwitch(session: net_snmp.Session, row: SwitchRow): Promis
       ifIn = got(8), ifOut = got(9), ifHCIn = got(10), ifHCOut = got(11),
       ifInErr = got(12), ifOutErr = got(13), ifInDisc = got(14), ifOutDisc = got(15),
       ifInUcast = got(16), ifOutUcast = got(17);
+    console.warn(`[snmp] Interfaces: ifIdx=${ifIdx.length} ifDescr=${ifDescr.length} ifName=${ifNameV.length} ifOper=${ifOper.length}`);
     const idxList = ifIdx.map((vb) => asNumber(vb)).filter((v): v is number => v !== null);
     if (idxList.length === 0) {
-      console.warn("[snmp] ifIndex subtree returned 0 entries — switch may not expose IF-MIB");
+      console.warn("[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.");
     }
     for (const ifIndex of idxList) {
       const suffix = String(ifIndex);
