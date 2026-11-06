@@ -713,3 +713,177 @@ $ next dev -p 3000
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
 [poller] Mum-Core-01: SNMP returned no data, falling back to SSH (admin@10.10.1.11:22)
+ GET / 200 in 92ms (compile: 6ms, render: 86ms)
+[poller] Mum-Core-01: SSH fallback returned no data
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[poller] Mum-Core-01: SNMP returned no data, falling back to SSH (admin@10.10.1.11:22)
+[poller] Mum-Core-01: SSH fallback returned no data
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+ GET /api/switches 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/companies 200 in 7ms (compile: 1679µs, render: 5ms)
+ GET /api/rings 200 in 12ms (compile: 3ms, render: 9ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 12ms (compile: 7ms, render: 5ms)
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[poller] Mum-Core-01: SNMP returned no data, falling back to SSH (admin@10.10.1.11:22)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 1959µs, render: 5ms)
+[poller] Mum-Core-01: SSH fallback returned no data
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+ GET /api/switches 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/rings 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/companies 200 in 5ms (compile: 1506µs, render: 3ms)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 1978µs, render: 4ms)
+[poller] Mum-Core-01: SNMP returned no data, falling back to SSH (admin@10.10.1.11:22)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 1997µs, render: 6ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+[poller] Mum-Core-01: SSH fallback returned no data
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 3ms, render: 5ms)
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+ GET /api/switches 200 in 7ms (compile: 2ms, render: 5ms)
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+ GET /api/rings 200 in 7ms (compile: 2ms, render: 5ms)
+ GET /api/companies 200 in 6ms (compile: 1785µs, render: 4ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[poller] Mum-Core-01: SNMP returned no data, falling back to SSH (admin@10.10.1.11:22)
+ GET /api/companies 200 in 7ms (compile: 1979µs, render: 5ms)
+ GET /api/switches 200 in 5ms (compile: 1371µs, render: 4ms)
+ GET /api/rings 200 in 6ms (compile: 1654µs, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
+[poller] Mum-Core-01: SSH fallback returned no data
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 3ms)
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 1894µs, render: 6ms)
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[poller] Mum-Core-01: SNMP returned no data, falling back to SSH (admin@10.10.1.11:22)
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/rings 200 in 5ms (compile: 1438µs, render: 4ms)
+ GET /api/companies 200 in 5ms (compile: 1349µs, render: 4ms)
+ GET /api/switches 200 in 5ms (compile: 1307µs, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 5ms)
+[poller] Mum-Core-01: SSH fallback returned no data
+ GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 7ms (compile: 2ms, render: 4ms)
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
+[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
+[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+ GET /api/rings 200 in 7ms (compile: 1995µs, render: 5ms)
+ GET /api/switches 200 in 6ms (compile: 1447µs, render: 4ms)
+ GET /api/companies 200 in 6ms (compile: 1620µs, render: 4ms)
+[poller] Mum-Core-01: SNMP returned no data, falling back to SSH (admin@10.10.1.11:22)
+ GET /api/metrics 200 in 6ms (compile: 2ms, render: 4ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
