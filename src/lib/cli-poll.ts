@@ -848,23 +848,84 @@ function parseShowCdpNeighbors(output: string, detail: boolean): CdpNeighbor[] {
       }
     }
   } else {
-    // Parse table format
+    // Parse table format — handle both IOS and Cisco SMB formats.
+    // IOS format:    "Device ID        Local Intrfce     Holdtme    Capability  Platform  Port ID"
+    //                "Switch2          Gi1/0/1           150              R S   C1300     Gi1/0/2"
+    // SMB format:    "Device ID                                            Local Interface    Holdtme   Capability   Platform    Port ID"
+    //                "switch2.example.com                                  gi1               150        S            CBS3xx-24P  gi25"
     const lines = output.split("\n");
     let inTable = false;
+    let headerColumns: string[] = [];
     for (const line of lines) {
-      if (line.match(/Device ID.*Local.*Intrfce/i)) { inTable = true; continue; }
-      if (inTable) {
-        if (line.trim() === "" || line.startsWith("---")) { inTable = false; continue; }
-        // Match: DeviceID LocalIface Holdtime Capability Platform PortID
-        const m = line.match(/^(\S+)\s+(\S+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$/);
-        if (m) {
+      // Detect header — line containing "Device ID" and "Local" and "Port"
+      if (/Device ID/i.test(line) && /Local/i.test(line) && /Port/i.test(line)) {
+        inTable = true;
+        // Try to detect column positions from header
+        headerColumns = [];
+        const headerRegex = /(Device\s+ID|Local\s+Int\S*|Hold\S*|Capab\S*|Platform|Port\s+ID)/gi;
+        let hm;
+        while ((hm = headerRegex.exec(line)) !== null) {
+          headerColumns.push(hm[0].replace(/\s+/g, " ").trim());
+        }
+        continue;
+      }
+      // Skip capability codes block (lines starting with "Capability Codes:")
+      if (/^Capability Codes:/i.test(line) || /^\s+R\s*-\s*Router/i.test(line)) {
+        inTable = false;
+        continue;
+      }
+      // Skip separator lines
+      if (/^-+\s*$/.test(line.trim()) || line.trim() === "") {
+        if (inTable && line.trim() === "") {
+          // Empty line might end the table
+          // But continue scanning for more entries below
+        }
+        continue;
+      }
+      // Skip Total entries line: "Total entries displayed: 1"
+      if (/^Total entries/i.test(line.trim())) {
+        inTable = false;
+        continue;
+      }
+      if (!inTable) continue;
+      // Try to parse a port line.
+      // Strategy: split by 2+ spaces, find columns matching expected positions.
+      const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(t => t);
+      // We expect at least 6 tokens: DeviceID, LocalIntf, Holdtme, Capability, Platform, PortID
+      if (tokens.length >= 6) {
+        const deviceId = tokens[0];
+        const localIfName = tokens[1];
+        const devicePort = tokens[tokens.length - 1];  // last token is Port ID
+        const platform = tokens[tokens.length - 2];
+        // Validate: local interface should look like a port name (gi1, Gi1/0/1, Te1, etc.)
+        if (/^(gi|te|tw|fa|hu|fo|Gi|Te|Tw|Fa|Hu|Fo)/i.test(localIfName)) {
+          // Validate: holdtme should be a number
+          const holdtme = parseInt(tokens[2], 10);
+          if (Number.isFinite(holdtme)) {
+            neighbors.push({
+              localIfIndex: 0,
+              localIfName: localIfName,
+              deviceId,
+              devicePort,
+              address: null,
+              platform,
+              protocol: "cdp",
+            });
+          }
+        }
+      } else if (tokens.length >= 3) {
+        // Some SMB firmware has compact format with just: DeviceID, LocalIntf, PortID
+        const deviceId = tokens[0];
+        const localIfName = tokens[1];
+        const devicePort = tokens[2];
+        if (/^(gi|te|tw|fa|hu|fo|Gi|Te|Tw|Fa|Hu|Fo)/i.test(localIfName)) {
           neighbors.push({
             localIfIndex: 0,
-            localIfName: m[2],
-            deviceId: m[1],
-            devicePort: m[6],
+            localIfName,
+            deviceId,
+            devicePort,
             address: null,
-            platform: m[5],
+            platform: null,
             protocol: "cdp",
           });
         }
