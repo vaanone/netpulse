@@ -1431,15 +1431,17 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   // 4: show system — uptime (parse before inventory since we check !result.uptimeSeconds)
   if (outputs[4] && !outputs[4].includes("% Unrecognized") && !result.uptimeSeconds) {
     const sysOut = outputs[4];
-    // Try format: "System Up Time (days,hour:min:sec):  01,21:11:50"
-    const upDaysHms = sysOut.match(/System Up Time[^:]*:\s*(\d+),(\d+):(\d+):(\d+)/i);
+    // Try format: "System Up Time (days,hour:min:sec):       01,21:11:50"
+    // Note: the regex must skip past the colon inside "(days,hour:min:sec)"
+    // We use [\s\S]*? to match any character (including colons) up to the value.
+    const upDaysHms = sysOut.match(/System Up Time[\s\S]*?:\s*(\d+),(\d+):(\d+):(\d+)/i);
     if (upDaysHms) {
       const days = parseInt(upDaysHms[1]);
       const hours = parseInt(upDaysHms[2]);
       const mins = parseInt(upDaysHms[3]);
       const secs = parseInt(upDaysHms[4]);
       result.uptimeSeconds = days * 86400 + hours * 3600 + mins * 60 + secs;
-      console.warn(`[cli] ${row.name}: uptime from show system = ${result.uptimeSeconds}s`);
+      console.warn(`[cli] ${row.name}: uptime from show system = ${result.uptimeSeconds}s (${days}d ${hours}h ${mins}m ${secs}s)`);
     } else {
       // Try format: "System Up Time: 1 day, 2 hours, 30 minutes"
       const upText = sysOut.match(/System Up Time:\s*(.+?)$/im);
@@ -1582,6 +1584,6 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   }
 
   console.warn(`[${config.protocol}] ${row.name}: ${commandsRun}/${commands.length} cmds OK. ` +
-               `interfaces=${result.interfaces.length} neighbors=${result.neighbors.length} cpu=${result.cpuUsage} mem=${result.memoryUsed}`);
+               `interfaces=${result.interfaces.length} neighbors=${result.neighbors.length} dom=${Object.keys(result.domReadings).length}`);
   return result;
 }

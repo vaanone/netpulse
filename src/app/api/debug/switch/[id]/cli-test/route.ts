@@ -53,16 +53,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       sysDescr: result.sysDescr,
       sysName: result.sysName,
       uptimeSeconds: result.uptimeSeconds,
-      cpuUsage: result.cpuUsage,
-      memoryUsed: result.memoryUsed,
-      memoryFree: result.memoryFree,
-      memoryTotal: result.memoryUsed != null && result.memoryFree != null
-        ? result.memoryUsed + result.memoryFree : null,
-      memoryUsagePct: result.memoryUsed != null && result.memoryFree != null
-        ? (result.memoryUsed / (result.memoryUsed + result.memoryFree)) * 100 : null,
       power: result.power,
       interfaceCount: result.interfaces.length,
       neighborCount: result.neighbors.length,
+      domReadingCount: Object.keys(result.domReadings || {}).length,
+      transceiverCount: (result.transceivers || []).length,
     },
     sampleInterfaces: result.interfaces.slice(0, 10).map((i: any) => ({
       ifIndex: i.ifIndex,
@@ -90,10 +85,10 @@ function buildDiagnosis(result: any, proto: string): string[] {
     d.push(`${proto.toUpperCase()} connection failed entirely. Check host, port, credentials.`);
     return d;
   }
-  if (result.cpuUsage == null) d.push("CPU: null. CLI command 'show processes cpu' didn't parse. Your firmware may use different output format.");
-  if (result.memoryUsed == null) d.push("Memory: null. CLI command 'show memory statistics' (or 'show memory') didn't parse. Try running it manually on the switch.");
-  if (result.interfaces.length === 0) d.push("Interfaces: empty. CLI commands 'show interfaces status' / 'show interfaces description' didn't return parsed rows. Verify output format on your firmware.");
+  if (result.interfaces.length === 0) d.push("Interfaces: empty. CLI command 'show interfaces status' didn't return parsed rows. Verify output format on your firmware.");
   if (result.neighbors.length === 0) d.push("Neighbors: 0. Either no CDP/LLDP neighbors are connected, or 'show cdp neighbors' output didn't parse.");
-  if (result.sysDescr == null) d.push("sysDescr: null. 'show version' didn't parse. The regex may need updating for your firmware.");
+  if (result.sysDescr == null) d.push("sysDescr: null. 'show version' or 'show system' didn't parse. The regex may need updating for your firmware.");
+  if (result.uptimeSeconds == null) d.push("Uptime: null. 'show system' didn't parse the uptime field.");
+  if (Object.keys(result.domReadings || {}).length === 0) d.push("SFP DOM: 0 readings. 'show fiber-ports optical-transceiver' didn't return parsed data or was not supported.");
   return d;
 }
