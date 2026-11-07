@@ -1010,6 +1010,193 @@ function parseShowEnvironmentPower(output: string): PowerSupply[] {
   return psus;
 }
 
+/**
+ * Parse "show interfaces transceiver" — SFP DOM readings.
+ * Format (IOS-XE):
+ *   If device is externally calibrated.
+ *   PRBS_ERR: 0
+ *   Temperature: 33.23 C
+ *   Voltage: 3.29 V
+ *   Current: 7.65 mA
+ *   Optical Tx Power: -2.34 dBm
+ *   Optical Rx Power: -3.45 dBm
+ *
+ * Format (Cisco SMB / CBS3xx):
+ *   Port      Temperature  Voltage  Current  Optical TX    Optical RX
+ *   -------   -----------  -------  -------  -----------   -----------
+ *   gi25      33.23 C      3.29 V   7.65 mA  -2.34 dBm     -3.45 dBm
+ */
+function parseShowInterfacesTransceiver(output: string): {
+  domReadings: Record<number, any>;
+  transceivers: any[];
+  ifIndexByIfName: Map<string, number>;
+} {
+  const domReadings: Record<number, any> = {};
+  const transceivers: any[] = [];
+  // We return a map from ifName → temporary ifIndex. The caller will replace
+  // this with real ifIndex once we know it. For now, use 1-based counting.
+  const ifIndexByIfName = new Map<string, number>();
+
+  // Try Cisco SMB table format first
+  // Port      Temperature  Voltage  Current  Optical TX    Optical RX
+  // -------   -----------  -------  -------  -----------   -----------
+  // gi25      33.23 C      3.29 V   7.65 mA  -2.34 dBm     -3.45 dBm
+  const lines = output.split("\n");
+  let inTable = false;
+  let tempIfIndex = 1000;  // arbitrary start for DOM readings
+  for (const line of lines) {
+    // Detect header
+    if (/Port\s+Temperature\s+Voltage\s+Current/i.test(line) && !inTable) {
+      inTable = true;
+      continue;
+    }
+    if (inTable) {
+      // Skip separator
+      if (/^-+\s+-+/i.test(line.trim())) continue;
+      if (!line.trim()) { inTable = false; continue; }
+      // Try to match: gi25  33.23 C  3.29 V  7.65 mA  -2.34 dBm  -3.45 dBm
+      const m = line.match(/^(\w+)\s+([\d.]+)\s*C\s+([\d.]+)\s*V\s+([\d.]+)\s*mA\s+(-?[\d.]+)\s*dBm\s+(-?[\d.]+)\s*dBm/i);
+      if (m) {
+        const ifName = m[1];
+        const temp = parseFloat(m[2]);
+        const voltage = parseFloat(m[3]);
+        const biasCurrent = parseFloat(m[4]);
+        const txPower = parseFloat(m[5]);
+        const rxPower = parseFloat(m[6]);
+        const ifIndex = ++tempIfIndex;
+        ifIndexByIfName.set(ifName.toLowerCase(), ifIndex);
+        domReadings[ifIndex] = {
+          temperature: temp,
+          voltage,
+          biasCurrent,
+          txPower,
+          rxPower,
+        };
+        transceivers.push({
+          entityIndex: ifIndex,
+          name: ifName,
+          descr: "SFP",
+          modelName: null,
+          serialNum: null,
+          parentEntityIndex: 0,
+          ifIndex,
+        });
+        continue;
+      }
+    }
+  }
+  if (Object.keys(domReadings).length > 0) {
+    return { domReadings, transceivers, ifIndexByIfName };
+  }
+
+  // Fall back to IOS-XE per-block format
+  // If device is externally calibrated.
+  // PRBS_ERR: 0
+  // Temperature: 33.23 C
+  // Voltage: 3.29 V
+  // Current: 7.65 mA
+  // Optical Tx Power: -2.34 dBm
+  // Optical Rx Power: -3.45 dBm
+  // Note: Each block starts with the interface name on its own line
+  let currentIfName: string | null = null;
+  let currentReading: any = {};
+  for (const line of lines) {
+    // Look for interface name on its own line: "Gi1/0/1" or "Te1/0/1"
+    const ifMatch = line.match(/^(\w+(?:\/\d+)+)\s*$/);
+    if (ifMatch) {
+      // Save previous block if any
+      if (currentIfName && (currentReading.temperature != null || currentReading.txPower != null)) {
+        const ifIndex = ++tempIfIndex;
+        ifIndexByIfName.set(currentIfName.toLowerCase(), ifIndex);
+        domReadings[ifIndex] = currentReading;
+        transceivers.push({
+          entityIndex: ifIndex,
+          name: currentIfName,
+          descr: "SFP",
+          modelName: null,
+          serialNum: null,
+          parentEntityIndex: 0,
+          ifIndex,
+        });
+      }
+      currentIfName = ifMatch[1];
+      currentReading = {};
+      continue;
+    }
+    if (!currentIfName) continue;
+    const tempMatch = line.match(/Temperature:\s*(-?[\d.]+)\s*C/i);
+    if (tempMatch) { currentReading.temperature = parseFloat(tempMatch[1]); continue; }
+    const voltMatch = line.match(/Voltage:\s*(-?[\d.]+)\s*V/i);
+    if (voltMatch) { currentReading.voltage = parseFloat(voltMatch[1]); continue; }
+    const currMatch = line.match(/Current:\s*(-?[\d.]+)\s*mA/i);
+    if (currMatch) { currentReading.biasCurrent = parseFloat(currMatch[1]); continue; }
+    const txMatch = line.match(/Optical Tx Power:\s*(-?[\d.]+)\s*dBm/i);
+    if (txMatch) { currentReading.txPower = parseFloat(txMatch[1]); continue; }
+    const rxMatch = line.match(/Optical Rx Power:\s*(-?[\d.]+)\s*dBm/i);
+    if (rxMatch) { currentReading.rxPower = parseFloat(rxMatch[1]); continue; }
+  }
+  // Save the last block
+  if (currentIfName && (currentReading.temperature != null || currentReading.txPower != null)) {
+    const ifIndex = ++tempIfIndex;
+    ifIndexByIfName.set(currentIfName.toLowerCase(), ifIndex);
+    domReadings[ifIndex] = currentReading;
+    transceivers.push({
+      entityIndex: ifIndex,
+      name: currentIfName,
+      descr: "SFP",
+      modelName: null,
+      serialNum: null,
+      parentEntityIndex: 0,
+      ifIndex,
+    });
+  }
+
+  return { domReadings, transceivers, ifIndexByIfName };
+}
+
+/**
+ * Parse "show inventory" — transceiver part numbers and serials.
+ * Format:
+ *   NAME: "GigabitEthernet1/0/1", DESCR: "SFP-10G-SR"
+ *   PID: SFP-10G-SR , VID: V03 , SN: ABC1234
+ */
+function parseShowInventory(output: string): Map<string, { partNumber: string; serialNumber: string; descr: string }> {
+  const result = new Map<string, { partNumber: string; serialNumber: string; descr: string }>();
+  const lines = output.split("\n");
+  let currentName: string | null = null;
+  let currentDescr: string | null = null;
+  for (const line of lines) {
+    // NAME: "GigabitEthernet1/0/1", DESCR: "SFP-10G-SR"
+    const nameMatch = line.match(/NAME:\s*"([^"]+)"\s*,\s*DESCR:\s*"([^"]+)"/i);
+    if (nameMatch) {
+      currentName = nameMatch[1];
+      currentDescr = nameMatch[2];
+      continue;
+    }
+    // PID: SFP-10G-SR , VID: V03 , SN: ABC1234
+    const pidMatch = line.match(/PID:\s*(\S+)\s*,\s*VID:\s*\S+\s*,\s*SN:\s*(\S+)/i);
+    if (pidMatch && currentName) {
+      const partNumber = pidMatch[1];
+      const serialNumber = pidMatch[2];
+      // Extract just the port name from "GigabitEthernet1/0/1" → "Gi1/0/1"
+      let portName = currentName;
+      const portMatch = currentName.match(/^(Gi|Te|Tw|Fa|Hu|Fo|Ten|Gigabit|TenGigabit|FortyGigabit|HundredGigabit)\S*?(\d+(?:\/\d+)*)/i);
+      if (portMatch) {
+        const prefix = portMatch[1].substring(0, 2).toLowerCase();
+        portName = prefix + portMatch[2];
+      }
+      result.set(portName.toLowerCase(), {
+        partNumber,
+        serialNumber,
+        descr: currentDescr ?? "",
+      });
+      currentName = null;
+      currentDescr = null;
+    }
+  }
+  return result;
+}
+
 /** Main entry point — log into the switch via SSH and collect all data. */
 export async function pollSwitchViaSsh(row: SwitchRow): Promise<PollResult | null> {
   if (!row.sshEnabled || !row.sshUsername || !row.sshPassword) {
@@ -1093,6 +1280,8 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     "show lldp neighbors",
     "show power inline",
     "show environment power",
+    "show interfaces transceiver",              // IOS-XE — SFP DOM readings
+    "show inventory",                           // transceiver part numbers / serials
   ];
 
   let outputs: string[];
@@ -1213,6 +1402,68 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     if (psus.length > 0) {
       if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
       else result.power.powerSupplies = psus;
+    }
+  }
+
+  // 11: show interfaces transceiver — SFP DOM readings (Tx/Rx power, temp, voltage, bias)
+  // Returns DOM readings keyed by temp ifIndex (1001+). We need to remap to real ifIndex
+  // by matching the ifName from the transceiver list to the interfaces we already parsed.
+  if (outputs[11] && !outputs[11].includes("% Unrecognized")) {
+    const { domReadings: tempDom, transceivers: tempTransceivers, ifIndexByIfName } = parseShowInterfacesTransceiver(outputs[11]);
+    if (Object.keys(tempDom).length > 0) {
+      // Build a map from temp ifIndex → real ifIndex by matching ifName
+      const tempToReal = new Map<number, number>();
+      for (const [ifNameLower, tempIdx] of ifIndexByIfName.entries()) {
+        // Find the interface in result.interfaces with matching ifName (case-insensitive)
+        const iface = result.interfaces.find((i: any) => i.ifName && i.ifName.toLowerCase() === ifNameLower);
+        if (iface) {
+          tempToReal.set(tempIdx, iface.ifIndex);
+        } else {
+          // No matching interface — keep temp index (port is probably down or transceiver-only)
+          tempToReal.set(tempIdx, tempIdx);
+        }
+      }
+      // Remap DOM readings to real ifIndex
+      for (const [tempIdx, reading] of Object.entries(tempDom)) {
+        const realIdx = tempToReal.get(Number(tempIdx)) ?? Number(tempIdx);
+        result.domReadings[realIdx] = reading;
+      }
+      // Remap transceivers too
+      for (const t of tempTransceivers) {
+        const realIdx = tempToReal.get(t.ifIndex) ?? t.ifIndex;
+        result.transceivers.push({
+          ...t,
+          ifIndex: realIdx,
+          entityIndex: realIdx,
+        });
+      }
+      console.warn(`[cli] ${row.name}: parsed ${Object.keys(result.domReadings).length} SFP transceiver readings`);
+    }
+  }
+
+  // 12: show inventory — transceiver part numbers and serials
+  if (outputs[12] && !outputs[12].includes("% Unrecognized")) {
+    const inventory = parseShowInventory(outputs[12]);
+    if (inventory.size > 0) {
+      // Enrich the transceivers we already parsed with part numbers / serials
+      for (const t of result.transceivers) {
+        const inv = inventory.get((t.name || "").toLowerCase());
+        if (inv) {
+          t.modelName = inv.partNumber;
+          t.serialNum = inv.serialNumber;
+          t.descr = inv.descr;
+        }
+      }
+      // Also enrich interfaces with transceiver info
+      for (const iface of result.interfaces) {
+        const inv = inventory.get((iface.ifName || "").toLowerCase());
+        if (inv) {
+          (iface as any).transceiverType = inv.descr;
+          (iface as any).partNumber = inv.partNumber;
+          (iface as any).serialNumber = inv.serialNumber;
+        }
+      }
+      console.warn(`[cli] ${row.name}: parsed ${inventory.size} inventory entries`);
     }
   }
 
