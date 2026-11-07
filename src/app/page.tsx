@@ -965,7 +965,20 @@ function RingTopology(props: {
   onSwitchClick: (id: string) => void;
 }) {
   const { switches, links, onSwitchClick } = props;
-  const [layout, setLayout] = React.useState<"circular" | "linear">("circular");
+  // Auto-select layout: if there are only 2 switches per ring, use linear
+  // (not circular). A ring closure only makes sense with 3+ switches.
+  const [layout, setLayout] = React.useState<"circular" | "linear">(() => {
+    // Check if any ring has only 2 switches — if so, default to linear
+    const ringCounts = new Map<string, number>();
+    for (const sw of switches) {
+      const rid = sw.ringId ?? "_none";
+      ringCounts.set(rid, (ringCounts.get(rid) ?? 0) + 1);
+    }
+    for (const [, count] of ringCounts) {
+      if (count <= 2) return "linear";
+    }
+    return "circular";
+  });
   const [hoveredLink, setHoveredLink] = React.useState<RingLinkSnapshot | null>(null);
   const [popoverPos, setPopoverPos] = React.useState<{ x: number; y: number } | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);

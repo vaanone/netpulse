@@ -378,8 +378,8 @@ export async function runPollCycle(force: boolean = false): Promise<Snapshot> {
     // If a switch has a CDP neighbor that matches another configured switch,
     // and neither has a nextSwitchId set yet, automatically pair them:
     //   switchA.nextSwitchId = switchB
-    //   switchB.nextSwitchId = switchA
-    // This forms a ring topology without manual configuration.
+    // For 2 switches, this forms a LINEAR connection (A → B), not a ring.
+    // For 3+ switches, the user can manually close the ring if needed.
     for (const sw of snapshots) {
       if (sw.nextSwitchId) continue;  // already paired
       // Find a matched CDP neighbor
@@ -389,12 +389,17 @@ export async function runPollCycle(force: boolean = false): Promise<Snapshot> {
       const target = snapshots.find(s => s.switchId === matchedNeighbor.matchedSwitchId);
       if (!target) continue;
       if (target.nextSwitchId && target.nextSwitchId !== sw.switchId) continue;  // target already paired with someone else
-      // Auto-pair: A → B and B → A
+      // Auto-pair: A → B (one direction only — linear, not ring)
+      // Only set B → A if there are 3+ switches (ring topology)
       console.warn(`[poller] AUTO-PAIR: ${sw.name} → ${target.name} (CDP: ${matchedNeighbor.deviceId} on ${matchedNeighbor.localIfName})`);
       sw.nextSwitchId = target.switchId;
       sw.nextSwitchName = target.name;
-      target.nextSwitchId = sw.switchId;
-      target.nextSwitchName = sw.name;
+      // Only close the ring if there are 3+ switches in the same ring
+      const sameRingSwitches = snapshots.filter(s => s.ringId === sw.ringId);
+      if (sameRingSwitches.length >= 3 && !target.nextSwitchId) {
+        target.nextSwitchId = sw.switchId;
+        target.nextSwitchName = sw.name;
+      }
       // Also set ringPort if we have the CDP port info
       if (matchedNeighbor.localIfIndex && !sw.ringPort) {
         const ringPortPort = sw.ports.find(p => p.ifIndex === matchedNeighbor.localIfIndex);
@@ -409,8 +414,10 @@ export async function runPollCycle(force: boolean = false): Promise<Snapshot> {
       // Persist the auto-paired nextSwitchId to the database
       try {
         await db.switch.update({ where: { id: sw.switchId }, data: { nextSwitchId: target.switchId } });
-        await db.switch.update({ where: { id: target.switchId }, data: { nextSwitchId: sw.switchId } });
-        console.warn(`[poller] AUTO-PAIR: saved to DB — ${sw.name}.nextSwitchId=${target.name}, ${target.name}.nextSwitchId=${sw.name}`);
+        if (sameRingSwitches.length >= 3 && !target.nextSwitchId) {
+          await db.switch.update({ where: { id: target.switchId }, data: { nextSwitchId: sw.switchId } });
+        }
+        console.warn(`[poller] AUTO-PAIR: saved to DB — ${sw.name}.nextSwitchId=${target.name}`);
       } catch (e: any) {
         console.warn(`[poller] AUTO-PAIR: DB save failed: ${e?.message}`);
       }
