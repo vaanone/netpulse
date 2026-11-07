@@ -5,11 +5,6 @@ $ next dev -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 615ms
+✓ Ready in 645ms
 ○ Compiling / ...
- GET / 200 in 3.7s (compile: 3.4s, render: 301ms)
- GET /api/metrics 200 in 139ms (compile: 125ms, render: 14ms)
- GET /api/switches 200 in 175ms (compile: 164ms, render: 11ms)
- GET /api/companies 200 in 26ms (compile: 20ms, render: 6ms)
- GET /api/rings 200 in 26ms (compile: 19ms, render: 6ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 27ms (compile: 20ms, render: 7ms)
+ GET / 200 in 3.8s (compile: 3.5s, render: 371ms)

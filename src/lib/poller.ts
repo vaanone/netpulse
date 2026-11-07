@@ -103,6 +103,10 @@ export async function runPollCycle(): Promise<Snapshot> {
             if (!sshResult.sysName && poll.sysName) sshResult.sysName = poll.sysName;
             if (!sshResult.uptimeSeconds && poll.uptimeSeconds) sshResult.uptimeSeconds = poll.uptimeSeconds;
             // Merge SNMP counters into cached SSH interfaces
+            // IMPORTANT: ALWAYS overwrite traffic counters (not just when null)
+            // because inBps/outBps requires the counter value to change between
+            // polls. If we only set when null, the counter stays frozen at the
+            // value from the first SSH poll, and delta = 0 → inBps = 0.
             if (sshResult.interfaces.length > 0 && poll.interfaces.length > 0) {
               const snmpByIfName = new Map<string, any>();
               for (const iface of poll.interfaces) {
@@ -111,10 +115,18 @@ export async function runPollCycle(): Promise<Snapshot> {
               for (const sshIface of sshResult.interfaces) {
                 const snmpIface = snmpByIfName.get((sshIface.ifName || "").toLowerCase());
                 if (snmpIface) {
-                  if (sshIface.ifInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifInOctets = snmpIface.ifHCInOctets;
-                  if (sshIface.ifOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifOutOctets = snmpIface.ifHCOutOctets;
-                  if (sshIface.ifHCInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifHCInOctets = snmpIface.ifHCInOctets;
-                  if (sshIface.ifHCOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifHCOutOctets = snmpIface.ifHCOutOctets;
+                  // Always overwrite with fresh SNMP counters
+                  if (snmpIface.ifHCInOctets != null) {
+                    sshIface.ifInOctets = snmpIface.ifHCInOctets;
+                    sshIface.ifHCInOctets = snmpIface.ifHCInOctets;
+                  }
+                  if (snmpIface.ifHCOutOctets != null) {
+                    sshIface.ifOutOctets = snmpIface.ifHCOutOctets;
+                    sshIface.ifHCOutOctets = snmpIface.ifHCOutOctets;
+                  }
+                  // Also update errors
+                  if (snmpIface.ifInErrors != null) sshIface.ifInErrors = snmpIface.ifInErrors;
+                  if (snmpIface.ifOutErrors != null) sshIface.ifOutErrors = snmpIface.ifOutErrors;
                 }
               }
             }
@@ -153,8 +165,12 @@ export async function runPollCycle(): Promise<Snapshot> {
                   sshResult.reachable = true;
                   sshResult.error = `Data via ${proto.toUpperCase()} CLI. ${sshResult.error ?? ""}`;
                   poll = sshResult;
-                  // Cache the result
-                  SSH_CACHE.set(sw.id, { result: { ...sshResult }, ts: now });
+                  // Cache the result — deep copy interfaces so modifications
+                  // in subsequent polls don't corrupt the cache
+                  SSH_CACHE.set(sw.id, {
+                    result: { ...sshResult, interfaces: sshResult.interfaces.map((i: any) => ({ ...i })) },
+                    ts: now
+                  });
                   console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll succeeded — interfaces=${poll.interfaces.length} neighbors=${poll.neighbors.length} dom=${Object.keys(poll.domReadings).length} uptime=${poll.uptimeSeconds}s (cached for ${SSH_CACHE_TTL_MS / 1000}s)`);
                 } else {
                   console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} returned no useful data, keeping SNMP result`);
