@@ -266,43 +266,34 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
             if (promptMatch) {
               console.warn(`[ssh] ${config.host}: prompt detected — "${promptMatch[0].trim()}"`);
               promptReady = true;
-              // Send newline first to get a fresh prompt, then disable paging + echo
-              stream.write("\n");
-              setTimeout(() => {
-                // Disable paging
-                stream.write("terminal length 0\n");
-                setTimeout(() => {
-                  stream.write("terminal datadump\n");
-                  setTimeout(() => {
-                    // Try to disable character echo on SMB switches.
-                    // Standard IOS: "no terminal monitor" (not quite the same)
-                    // Cisco SMB: "no terminal echo" or just live with it
-                    stream.write("terminal no echo\n");
-                    setTimeout(() => {
-                      // Start first command
-                      currentCmdIdx = 0;
-                      cmdSentForCurrent = true;
-                      collectedOutput = "";
-                      stream.write(commands[0] + "\n");
-                      setPerCmdTimer();  // start per-command timeout
-                    }, 200);
-                  }, 200);
-                }, 200);
-              }, 200);
+              // DON'T send terminal length 0 / datadump / no echo — these return
+              // "% Unrecognized command" on Catalyst SMB firmware, and each error
+              // response ends with "HPC1#" which triggers our prompt detector
+              // again, throwing off command indexing by 3.
+              //
+              // Catalyst SMB switches don't enable paging by default, so we
+              // don't need to disable it. Just send the first real command.
+              currentCmdIdx = 0;
+              cmdSentForCurrent = true;
+              collectedOutput = "";
+              stream.write(commands[0] + "\n");
+              setPerCmdTimer();  // start per-command timeout
             } else if (Date.now() - promptWaitStart > 8000 && !promptReady) {
               // 8 seconds passed without detecting a prompt — maybe the prompt is unusual.
               // Force-start commands anyway. The shell might just be at a blank line or
               // the banner is taking too long.
               console.warn(`[ssh] ${config.host}: no prompt detected after 8s, forcing command start. Buffer so far: ${JSON.stringify(buf.slice(-200))}`);
               promptReady = true;
-              stream.write("\nterminal length 0\nterminal datadump\nterminal no echo\n");
+              // Don't send terminal setup commands — they fail on Catalyst SMB.
+              // Just send a newline and then the first real command.
+              currentCmdIdx = 0;
+              cmdSentForCurrent = true;
+              collectedOutput = "";
+              stream.write("\n");
               setTimeout(() => {
-                currentCmdIdx = 0;
-                cmdSentForCurrent = true;
-                collectedOutput = "";
                 stream.write(commands[0] + "\n");
-                setPerCmdTimer();  // start per-command timeout
-              }, 500);
+                setPerCmdTimer();
+              }, 200);
             }
             return;
           }
@@ -1363,20 +1354,18 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   // IMPORTANT: Order commands by priority — most important first.
   // If the switch drops the SSH connection after ~10 commands (common on
   // Catalyst SMB due to session limits), we still get the critical data.
-  // Tighter command list — 7 commands instead of 11.
-  // Each command takes ~5-15s on Catalyst SMB switches, so 7 commands × ~12s = ~85s
-  // fits within the 180s overall timeout with margin for handshake/login.
-  // Removed lower-priority commands: show lldp, show power inline, show environment power,
-  // show inventory, show system, show cdp neighbors detail.
-  // Kept the essentials: version, ports, CDP, SFP transceiver, ports description.
+  // 7 commands — all known to work on Catalyst SMB 1300 firmware.
+  // Removed 'show ports description' (returns '% bad parameter value').
+  // Removed setup commands (terminal length 0 etc.) — they return '% Unrecognized'
+  // and trigger premature prompt detection.
   const commands = [
     "show version",
     "show ports details",                       // port status (HIGH PRIORITY)
     "show cdp neighbors",                       // CDP neighbors (HIGH PRIORITY)
     "show interfaces transceiver",              // SFP DOM (HIGH PRIORITY)
-    "show ports description",                   // port descriptions
-    "show system",                             // uptime
+    "show system",                             // uptime + system info
     "show inventory",                           // transceiver part numbers
+    "show cdp neighbors detail",               // CDP with IP addresses
   ];
 
   let outputs: string[];
@@ -1399,14 +1388,14 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   }
 
   // Parse each command's output
-  // Command order (7 commands, CPU/memory removed):
+  // Command order (7 commands, no setup commands):
   //   0: show version
   //   1: show ports details           — port status (HIGH PRIORITY)
   //   2: show cdp neighbors           — CDP neighbors (HIGH PRIORITY)
   //   3: show interfaces transceiver  — SFP DOM (HIGH PRIORITY)
-  //   4: show ports description
-  //   5: show system                  — Cisco SMB uptime
-  //   6: show inventory               — transceiver part numbers
+  //   4: show system                  — uptime
+  //   5: show inventory               — transceiver part numbers
+  //   6: show cdp neighbors detail    — CDP with IP addresses
   let commandsRun = 0;
   let sshError: string | null = null;
 
@@ -1419,75 +1408,15 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   } else sshError = "show version: empty output";
 
   // 1: show ports details (Cisco SMB) — port status (HIGH PRIORITY)
-  // 4: show ports description (Cisco SMB) — port descriptions
   let ports: any[] = [];
-  if (outputs[1] && !outputs[1].includes("% Unrecognized")) {
+  if (outputs[1] && !outputs[1].includes("% Unrecognized") && !outputs[1].includes("% bad parameter")) {
     ports = parseShowPortsDetails(outputs[1]);
   }
-  if (ports.length === 0 && outputs[4] && !outputs[4].includes("% Unrecognized")) {
-    ports = parseShowPortsDescription(outputs[4]);
-  }
-  // Merge: if we got ports from status, also extract descriptions from output[4]
-  if (ports.length > 0 && outputs[4] && !outputs[4].includes("% Unrecognized")) {
-    for (const line of outputs[4].split("\n")) {
-      const m = line.match(/^(\S+)\s+(.+)$/);
-      if (m && m[1].match(/^(gi|te|tw|fa|hu|fo|po|ch)/i)) {
-        const ifNameLower = m[1].toLowerCase();
-        const port = ports.find(p => p.ifName.toLowerCase() === ifNameLower);
-        if (port && !port.ifAlias) port.ifAlias = m[2].trim();
-      }
-    }
-  }
-  let ifIndex = 1;
-  for (const p of ports) {
-    p.ifIndex = ifIndex++;
-    result.interfaces.push(p as any);
-  }
-  if (ports.length > 0) commandsRun++;
 
-  // 2: show cdp neighbors (HIGH PRIORITY)
-  if (outputs[2] && !outputs[2].includes("% Unrecognized")) {
-    const cdp = parseShowCdpNeighbors(outputs[2], false);
-    result.neighbors.push(...cdp);
-    if (cdp.length > 0) commandsRun++;
-  }
-
-  // 3: show interfaces transceiver — SFP DOM readings (HIGH PRIORITY)
-  if (outputs[3] && !outputs[3].includes("% Unrecognized")) {
-    const { domReadings: tempDom, transceivers: tempTransceivers, ifIndexByIfName } = parseShowInterfacesTransceiver(outputs[3]);
-    if (Object.keys(tempDom).length > 0) {
-      // Build a map from temp ifIndex → real ifIndex by matching ifName
-      const tempToReal = new Map<number, number>();
-      for (const [ifNameLower, tempIdx] of ifIndexByIfName.entries()) {
-        const iface = result.interfaces.find((i: any) => i.ifName && i.ifName.toLowerCase() === ifNameLower);
-        if (iface) {
-          tempToReal.set(tempIdx, iface.ifIndex);
-        } else {
-          tempToReal.set(tempIdx, tempIdx);
-        }
-      }
-      // Remap DOM readings to real ifIndex
-      for (const [tempIdx, reading] of Object.entries(tempDom)) {
-        const realIdx = tempToReal.get(Number(tempIdx)) ?? Number(tempIdx);
-        result.domReadings[realIdx] = reading;
-      }
-      // Remap transceivers too
-      for (const t of tempTransceivers) {
-        const realIdx = tempToReal.get(t.ifIndex) ?? t.ifIndex;
-        result.transceivers.push({
-          ...t,
-          ifIndex: realIdx,
-          entityIndex: realIdx,
-        });
-      }
-      console.warn(`[cli] ${row.name}: parsed ${Object.keys(result.domReadings).length} SFP transceiver readings`);
-    }
-  }
-
-  // 5: show system — Cisco SMB uptime + system info
-  if (outputs[5] && !outputs[5].includes("% Unrecognized") && !result.uptimeSeconds) {
-    const sysOut = outputs[5];
-    // Try format: "System Up Time (days,hours:minutes:seconds):  1,02:30:15"
+  // 4: show system — uptime (parse before inventory since we check !result.uptimeSeconds)
+  if (outputs[4] && !outputs[4].includes("% Unrecognized") && !result.uptimeSeconds) {
+    const sysOut = outputs[4];
+    // Try format: "System Up Time (days,hour:min:sec):  01,21:11:50"
     const upDaysHms = sysOut.match(/System Up Time[^:]*:\s*(\d+),(\d+):(\d+):(\d+)/i);
     if (upDaysHms) {
       const days = parseInt(upDaysHms[1]);
@@ -1495,6 +1424,7 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
       const mins = parseInt(upDaysHms[3]);
       const secs = parseInt(upDaysHms[4]);
       result.uptimeSeconds = days * 86400 + hours * 3600 + mins * 60 + secs;
+      console.warn(`[cli] ${row.name}: uptime from show system = ${result.uptimeSeconds}s`);
     } else {
       // Try format: "System Up Time: 1 day, 2 hours, 30 minutes"
       const upText = sysOut.match(/System Up Time:\s*(.+?)$/im);
@@ -1512,20 +1442,80 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
         if (seconds > 0) result.uptimeSeconds = seconds;
       }
     }
-    // Also try "Up Time" (without "System")
-    if (!result.uptimeSeconds) {
-      const upTime = sysOut.match(/Up Time[^:]*:\s*(\d+):(\d+):(\d+)/i);
-      if (upTime) {
-        result.uptimeSeconds = parseInt(upTime[1]) * 3600 + parseInt(upTime[2]) * 60 + parseInt(upTime[3]);
+    // Also extract System Description for sysDescr if we don't have it yet
+    if (!result.sysDescr) {
+      const descMatch = sysOut.match(/System Description:\s*(.+?)(?:\r?\n)/i);
+      if (descMatch) {
+        result.sysDescr = descMatch[1].trim();
+        console.warn(`[cli] ${row.name}: sysDescr from show system = ${result.sysDescr}`);
       }
     }
   }
 
-  // 6: show inventory — transceiver part numbers and serials
+  let ifIndex = 1;
+  for (const p of ports) {
+    p.ifIndex = ifIndex++;
+    result.interfaces.push(p as any);
+  }
+  if (ports.length > 0) commandsRun++;
+
+  // 2: show cdp neighbors (HIGH PRIORITY)
+  if (outputs[2] && !outputs[2].includes("% Unrecognized")) {
+    const cdp = parseShowCdpNeighbors(outputs[2], false);
+    result.neighbors.push(...cdp);
+    if (cdp.length > 0) commandsRun++;
+  }
+
+  // 6: show cdp neighbors detail — has IP addresses we can use
   if (outputs[6] && !outputs[6].includes("% Unrecognized")) {
-    const inventory = parseShowInventory(outputs[6]);
+    const cdpDetail = parseShowCdpNeighbors(outputs[6], true);
+    // Merge: if detail has IPs we didn't get from basic, update existing neighbors
+    for (const detailNeighbor of cdpDetail) {
+      const existing = result.neighbors.find(n =>
+        n.deviceId === detailNeighbor.deviceId && n.devicePort === detailNeighbor.devicePort
+      );
+      if (existing) {
+        if (!existing.address && detailNeighbor.address) existing.address = detailNeighbor.address;
+        if (!existing.platform && detailNeighbor.platform) existing.platform = detailNeighbor.platform;
+      } else {
+        result.neighbors.push(detailNeighbor);
+      }
+    }
+  }
+
+  // 3: show interfaces transceiver — SFP DOM readings (HIGH PRIORITY)
+  if (outputs[3] && !outputs[3].includes("% Unrecognized")) {
+    const { domReadings: tempDom, transceivers: tempTransceivers, ifIndexByIfName } = parseShowInterfacesTransceiver(outputs[3]);
+    if (Object.keys(tempDom).length > 0) {
+      const tempToReal = new Map<number, number>();
+      for (const [ifNameLower, tempIdx] of ifIndexByIfName.entries()) {
+        const iface = result.interfaces.find((i: any) => i.ifName && i.ifName.toLowerCase() === ifNameLower);
+        if (iface) {
+          tempToReal.set(tempIdx, iface.ifIndex);
+        } else {
+          tempToReal.set(tempIdx, tempIdx);
+        }
+      }
+      for (const [tempIdx, reading] of Object.entries(tempDom)) {
+        const realIdx = tempToReal.get(Number(tempIdx)) ?? Number(tempIdx);
+        result.domReadings[realIdx] = reading;
+      }
+      for (const t of tempTransceivers) {
+        const realIdx = tempToReal.get(t.ifIndex) ?? t.ifIndex;
+        result.transceivers.push({
+          ...t,
+          ifIndex: realIdx,
+          entityIndex: realIdx,
+        });
+      }
+      console.warn(`[cli] ${row.name}: parsed ${Object.keys(result.domReadings).length} SFP transceiver readings`);
+    }
+  }
+
+  // 5: show inventory — transceiver part numbers and serials
+  if (outputs[5] && !outputs[5].includes("% Unrecognized")) {
+    const inventory = parseShowInventory(outputs[5]);
     if (inventory.size > 0) {
-      // Enrich the transceivers we already parsed with part numbers / serials
       for (const t of result.transceivers) {
         const inv = inventory.get((t.name || "").toLowerCase());
         if (inv) {
@@ -1534,7 +1524,6 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
           t.descr = inv.descr;
         }
       }
-      // Also enrich interfaces with transceiver info
       for (const iface of result.interfaces) {
         const inv = inventory.get((iface.ifName || "").toLowerCase());
         if (inv) {
