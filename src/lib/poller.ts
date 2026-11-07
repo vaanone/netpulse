@@ -345,6 +345,48 @@ export async function runPollCycle(): Promise<Snapshot> {
       });
     }
 
+    // ─── Auto-pair switches via CDP ───
+    // If a switch has a CDP neighbor that matches another configured switch,
+    // and neither has a nextSwitchId set yet, automatically pair them:
+    //   switchA.nextSwitchId = switchB
+    //   switchB.nextSwitchId = switchA
+    // This forms a ring topology without manual configuration.
+    for (const sw of snapshots) {
+      if (sw.nextSwitchId) continue;  // already paired
+      // Find a matched CDP neighbor
+      const matchedNeighbor = sw.neighbors.find(n => n.matchedSwitchId && n.matchedSwitchId !== sw.switchId);
+      if (!matchedNeighbor || !matchedNeighbor.matchedSwitchId) continue;
+      // Check if the target switch also has no nextSwitchId (or points to us)
+      const target = snapshots.find(s => s.switchId === matchedNeighbor.matchedSwitchId);
+      if (!target) continue;
+      if (target.nextSwitchId && target.nextSwitchId !== sw.switchId) continue;  // target already paired with someone else
+      // Auto-pair: A → B and B → A
+      console.warn(`[poller] AUTO-PAIR: ${sw.name} → ${target.name} (CDP: ${matchedNeighbor.deviceId} on ${matchedNeighbor.localIfName})`);
+      sw.nextSwitchId = target.switchId;
+      sw.nextSwitchName = target.name;
+      target.nextSwitchId = sw.switchId;
+      target.nextSwitchName = sw.name;
+      // Also set ringPort if we have the CDP port info
+      if (matchedNeighbor.localIfIndex && !sw.ringPort) {
+        const ringPortPort = sw.ports.find(p => p.ifIndex === matchedNeighbor.localIfIndex);
+        if (ringPortPort) {
+          ringPortPort.isRingPort = true;
+          ringPortPort.remoteSwitchId = target.switchId;
+          ringPortPort.remoteSwitchName = target.name;
+          sw.ringPort = ringPortPort;
+          sw.ringPortAutoDetected = true;
+        }
+      }
+      // Persist the auto-paired nextSwitchId to the database
+      try {
+        await db.switch.update({ where: { id: sw.switchId }, data: { nextSwitchId: target.switchId } });
+        await db.switch.update({ where: { id: target.switchId }, data: { nextSwitchId: sw.switchId } });
+        console.warn(`[poller] AUTO-PAIR: saved to DB — ${sw.name}.nextSwitchId=${target.name}, ${target.name}.nextSwitchId=${sw.name}`);
+      } catch (e: any) {
+        console.warn(`[poller] AUTO-PAIR: DB save failed: ${e?.message}`);
+      }
+    }
+
     const links: RingLinkSnapshot[] = [];
     for (const sw of snapshots) {
       if (!sw.nextSwitchId) continue;
