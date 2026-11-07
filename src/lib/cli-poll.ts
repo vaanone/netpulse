@@ -299,7 +299,9 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
           }
 
           // We have a command in flight
-          collectedOutput += data.toString("utf8");
+          // Strip ANSI escape codes (e.g. \u001b[0m) that Cisco SMB switches
+          // inject into output — they confuse regex matching and prompt detection
+          collectedOutput += data.toString("utf8").replace(/\u001b\[[0-9;]*m/g, "");
 
           // Check if we got the prompt back — command finished.
           // The prompt is at the very END of the output. Only check the last 20 chars.
@@ -313,10 +315,13 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
           // Handle paging prompts — send space to continue.
           // Catalyst 1300: "More: <space>,  Quit: q or CTRL+Z, One line: <return>"
           // Standard IOS: "--More--"
-          const last30 = collectedOutput.slice(-30);
-          if (/--\s*[Mm]ore\s*--/.test(last30) || /More:\s*<space>/.test(last30) || /Quit:\s*q\s/.test(last30)) {
+          // Check the last 80 chars because the Catalyst prompt is ~55 chars long
+          // and might not fit in 30 chars.
+          const last80 = collectedOutput.slice(-80);
+          if (/--\s*[Mm]ore\s*--/.test(last80) || /More:\s*<space>/.test(last80) || /Quit:\s*q\s+or\s+CTRL/i.test(last80)) {
             stream.write(" ");
-            collectedOutput = collectedOutput.replace(/(--\s*[Mm]ore\s*--|More:\s*<space>[^\n]*)\s*$/, "");
+            // Remove the paging prompt from collected output
+            collectedOutput = collectedOutput.replace(/(--\s*[Mm]ore\s*--|More:\s*<space>[^\n]*|Quit:\s*q\s+or\s+CTRL[^\n]*)\s*$/, "");
             return;
           }
 
@@ -1493,6 +1498,31 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
           ifIndex: realIdx,
           entityIndex: realIdx,
         });
+        // If this transceiver's port is NOT in the interfaces list (e.g. gi25
+        // was missing from show interfaces status due to paging), add a virtual
+        // interface entry so the DOM data shows up on the dashboard.
+        const portName = t.name;
+        const existingIface = result.interfaces.find((i: any) => i.ifName && i.ifName.toLowerCase() === portName.toLowerCase());
+        if (!existingIface) {
+          const newIfIndex = realIdx;
+          result.interfaces.push({
+            ifIndex: newIfIndex,
+            ifName: portName,
+            ifDescr: "1G-Fiber",
+            ifAlias: "",
+            ifOperStatus: reading.temperature != null ? 1 : 2,  // if we have DOM data, port is probably UP
+            ifAdminStatus: 1,
+            ifHighSpeed: 1000,
+            ifSpeed: null,
+            ifInOctets: null,
+            ifOutOctets: null,
+            ifHCInOctets: null,
+            ifHCOutOctets: null,
+            ifInErrors: null,
+            ifOutErrors: null,
+          });
+          console.warn(`[cli] ${row.name}: added virtual interface ${portName} (ifIndex=${newIfIndex}) for SFP DOM data`);
+        }
       }
       console.warn(`[cli] ${row.name}: parsed ${Object.keys(result.domReadings).length} SFP transceiver readings`);
     }
