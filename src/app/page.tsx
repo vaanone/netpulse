@@ -2781,12 +2781,9 @@ function SwitchFormDialog(props: {
     }
     const payload = buildPayload();
     console.log("[handleSubmit] payload being sent:", { ...payload, nextSwitchId: payload.nextSwitchId, ringId: payload.ringId });
-    if (editing) {
-      // editing requires destructive gate
-      setGate(true);
-    } else {
-      saveMut.mutate(payload);
-    }
+    // Save directly — no password gate (switch edits aren't destructive).
+    // User just wants to set nextSwitchId / ringId / SNMP creds — should be one click.
+    saveMut.mutate(payload);
   }
 
   return (
