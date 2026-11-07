@@ -1325,10 +1325,8 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   const commands = [
     "show version",
     "show ports details",                       // port status (Cisco SMB) — HIGH PRIORITY
-    "show cdp neighbors",                       // CDP neighbors — HIGH PRIORITY (skip detail, faster)
+    "show cdp neighbors",                       // CDP neighbors — HIGH PRIORITY
     "show interfaces transceiver",              // SFP DOM — HIGH PRIORITY
-    "show processes cpu",                       // CPU
-    "show memory statistics",                  // memory
     "show ports description",                   // port descriptions
     "show lldp neighbors",                      // LLDP neighbors
     "show power inline",                        // PoE
@@ -1336,7 +1334,6 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     "show inventory",                           // transceiver part numbers
     "show system",                             // Cisco SMB — uptime + system info
     "show cdp neighbors detail",                // CDP with IP addresses (lower priority)
-    "show memory",                              // memory fallback
   ];
 
   let outputs: string[];
@@ -1359,20 +1356,18 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   }
 
   // Parse each command's output
-  // New command order (priority first):
+  // Command order (CPU/memory removed per user request):
   //   0: show version
   //   1: show ports details           — port status (HIGH PRIORITY)
   //   2: show cdp neighbors           — CDP neighbors (HIGH PRIORITY)
   //   3: show interfaces transceiver  — SFP DOM (HIGH PRIORITY)
-  //   4: show processes cpu
-  //   5: show memory statistics
-  //   6: show ports description
-  //   7: show lldp neighbors
-  //   8: show power inline
-  //   9: show environment power
-  //  10: show inventory
-  //  11: show cdp neighbors detail     (fallback for IP addresses)
-  //  12: show memory                   (fallback)
+  //   4: show ports description
+  //   5: show lldp neighbors
+  //   6: show power inline
+  //   7: show environment power
+  //   8: show inventory
+  //   9: show system                  — Cisco SMB uptime
+  //  10: show cdp neighbors detail     (fallback for IP addresses)
   let commandsRun = 0;
   let sshError: string | null = null;
 
@@ -1385,17 +1380,17 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   } else sshError = "show version: empty output";
 
   // 1: show ports details (Cisco SMB) — port status (HIGH PRIORITY)
-  // 6: show ports description (Cisco SMB) — port descriptions
+  // 4: show ports description (Cisco SMB) — port descriptions
   let ports: any[] = [];
   if (outputs[1] && !outputs[1].includes("% Unrecognized")) {
     ports = parseShowPortsDetails(outputs[1]);
   }
-  if (ports.length === 0 && outputs[6] && !outputs[6].includes("% Unrecognized")) {
-    ports = parseShowPortsDescription(outputs[6]);
+  if (ports.length === 0 && outputs[4] && !outputs[4].includes("% Unrecognized")) {
+    ports = parseShowPortsDescription(outputs[4]);
   }
-  // Merge: if we got ports from status, also extract descriptions from output[6]
-  if (ports.length > 0 && outputs[6] && !outputs[6].includes("% Unrecognized")) {
-    for (const line of outputs[6].split("\n")) {
+  // Merge: if we got ports from status, also extract descriptions from output[4]
+  if (ports.length > 0 && outputs[4] && !outputs[4].includes("% Unrecognized")) {
+    for (const line of outputs[4].split("\n")) {
       const m = line.match(/^(\S+)\s+(.+)$/);
       if (m && m[1].match(/^(gi|te|tw|fa|hu|fo|po|ch)/i)) {
         const ifNameLower = m[1].toLowerCase();
@@ -1412,15 +1407,15 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   if (ports.length > 0) commandsRun++;
 
   // 2: show cdp neighbors (HIGH PRIORITY — comes before detail)
-  // 11: show cdp neighbors detail (fallback for IP addresses)
+  // 10: show cdp neighbors detail (fallback for IP addresses)
   if (outputs[2] && !outputs[2].includes("% Unrecognized")) {
     const cdp = parseShowCdpNeighbors(outputs[2], false);
     result.neighbors.push(...cdp);
     if (cdp.length > 0) commandsRun++;
   }
-  // Also try detail version (index 12) — has IP addresses we can use
-  if (outputs[12] && !outputs[12].includes("% Unrecognized")) {
-    const cdpDetail = parseShowCdpNeighbors(outputs[12], true);
+  // Also try detail version (index 10) — has IP addresses we can use
+  if (outputs[10] && !outputs[10].includes("% Unrecognized")) {
+    const cdpDetail = parseShowCdpNeighbors(outputs[10], true);
     // Merge: if detail has IPs we didn't get from basic, update existing neighbors
     for (const detailNeighbor of cdpDetail) {
       const existing = result.neighbors.find(n =>
@@ -1468,50 +1463,33 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     }
   }
 
-  // 4: show processes cpu
-  if (outputs[4]) {
-    const cpu = parseShowCpu(outputs[4]);
-    if (cpu != null) { result.cpuUsage = cpu; commandsRun++; }
-  }
-
-  // 5: show memory statistics (or 13: show memory fallback)
-  const memOut = outputs[5] || outputs[13];
-  if (memOut) {
-    const mem = parseShowMemory(memOut);
-    if (mem) {
-      result.memoryUsed = mem.used;
-      result.memoryFree = mem.free;
-      commandsRun++;
-    }
-  }
-
-  // 7: show lldp neighbors
-  if (outputs[7] && !outputs[7].includes("% Unrecognized")) {
-    const lldp = parseShowLldpNeighbors(outputs[7]);
+  // 5: show lldp neighbors
+  if (outputs[5] && !outputs[5].includes("% Unrecognized")) {
+    const lldp = parseShowLldpNeighbors(outputs[5]);
     result.neighbors.push(...lldp);
   }
 
-  // 8: show power inline
-  if (outputs[8] && !outputs[8].includes("% Unrecognized")) {
-    const { totalPoeWatts } = parseShowPowerInline(outputs[8]);
+  // 6: show power inline
+  if (outputs[6] && !outputs[6].includes("% Unrecognized")) {
+    const { totalPoeWatts } = parseShowPowerInline(outputs[6]);
     if (totalPoeWatts != null) {
       if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
       else { result.power.totalPoeWatts = totalPoeWatts; result.power.totalPoeMilliWatts = totalPoeWatts * 1000; }
     }
   }
 
-  // 9: show environment power
-  if (outputs[9] && !outputs[9].includes("% Unrecognized")) {
-    const psus = parseShowEnvironmentPower(outputs[9]);
+  // 7: show environment power
+  if (outputs[7] && !outputs[7].includes("% Unrecognized")) {
+    const psus = parseShowEnvironmentPower(outputs[7]);
     if (psus.length > 0) {
       if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
       else result.power.powerSupplies = psus;
     }
   }
 
-  // 10: show inventory — transceiver part numbers and serials
-  if (outputs[10] && !outputs[10].includes("% Unrecognized")) {
-    const inventory = parseShowInventory(outputs[10]);
+  // 8: show inventory — transceiver part numbers and serials
+  if (outputs[8] && !outputs[8].includes("% Unrecognized")) {
+    const inventory = parseShowInventory(outputs[8]);
     if (inventory.size > 0) {
       // Enrich the transceivers we already parsed with part numbers / serials
       for (const t of result.transceivers) {
@@ -1535,9 +1513,9 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     }
   }
 
-  // 11: show system — Cisco SMB uptime + system info
-  if (outputs[11] && !outputs[11].includes("% Unrecognized") && !result.uptimeSeconds) {
-    const sysOut = outputs[11];
+  // 9: show system — Cisco SMB uptime + system info
+  if (outputs[9] && !outputs[9].includes("% Unrecognized") && !result.uptimeSeconds) {
+    const sysOut = outputs[9];
     // Try format: "System Up Time (days,hours:minutes:seconds):  1,02:30:15"
     const upDaysHms = sysOut.match(/System Up Time[^:]*:\s*(\d+),(\d+):(\d+):(\d+)/i);
     if (upDaysHms) {
@@ -1585,9 +1563,8 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   // If we got no useful data at all, mark as unreachable
   const hasAnyData =
     result.sysDescr != null || result.uptimeSeconds != null ||
-    result.cpuUsage != null || result.memoryUsed != null ||
     result.interfaces.length > 0 || result.neighbors.length > 0 ||
-    result.power != null;
+    result.power != null || Object.keys(result.domReadings).length > 0;
 
   if (!hasAnyData) {
     return {

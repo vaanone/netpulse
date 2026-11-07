@@ -1542,7 +1542,7 @@ function RingTraffic(props: {
 }
 
 // ===========================================================================
-// SWITCH HEALTH — CPU / Memory / Uptime
+// SWITCH HEALTH — Uptime / Port Status
 // ===========================================================================
 
 function SwitchHealth(props: {
@@ -1550,14 +1550,15 @@ function SwitchHealth(props: {
   onSwitchClick: (id: string) => void;
 }) {
   const { switches, onSwitchClick } = props;
-  const rows = [...switches].sort((a, b) => (b.cpuUsage ?? 0) - (a.cpuUsage ?? 0));
+  // Sort by portsDown descending — switches with down ports first
+  const rows = [...switches].sort((a, b) => (b.portsDown ?? 0) - (a.portsDown ?? 0));
 
   return (
     <PanelCard id="switch-health" className="scroll-mt-24">
       <SectionTitle
         icon={<Cpu className="size-4" />}
-        title="Switch Health — CPU / Memory / Uptime"
-        subtitle="Sorted by CPU usage (highest first)"
+        title="Switch Health — Uptime & Port Status"
+        subtitle="Sorted by ports down (most issues first)"
       />
       <CardContent>
         <div className="rounded-lg border border-border/60 overflow-hidden">
@@ -1566,10 +1567,10 @@ function SwitchHealth(props: {
               <TableRow className="bg-muted/30 hover:bg-muted/30">
                 <TableHead className="text-xs">Switch</TableHead>
                 <TableHead className="text-xs">Status</TableHead>
-                <TableHead className="text-xs">CPU</TableHead>
-                <TableHead className="text-xs">Memory</TableHead>
                 <TableHead className="text-xs">Uptime</TableHead>
                 <TableHead className="text-xs">Ports Up/Down</TableHead>
+                <TableHead className="text-xs">SFP Ports</TableHead>
+                <TableHead className="text-xs">CDP Neighbors</TableHead>
                 <TableHead className="text-xs">Last Seen</TableHead>
               </TableRow>
             </TableHeader>
@@ -1594,12 +1595,6 @@ function SwitchHealth(props: {
                       <span className={cn("font-medium", statusColor(sw.status))}>{sw.status}</span>
                     </span>
                   </TableCell>
-                  <TableCell>
-                    <UsageBar value={sw.cpuUsage ?? null} />
-                  </TableCell>
-                  <TableCell>
-                    <UsageBar value={sw.memoryUsage ?? null} />
-                  </TableCell>
                   <TableCell className="font-mono text-xs">{fmtUptime(sw.uptimeSeconds)}</TableCell>
                   <TableCell>
                     <span className="font-mono">
@@ -1607,6 +1602,12 @@ function SwitchHealth(props: {
                       <span className="text-muted-foreground"> / </span>
                       <span className="text-crit">{sw.portsDown}</span>
                     </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {sw.ports.filter(p => p.txPower != null || p.rxPower != null).length}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {sw.neighbors?.length ?? 0}
                   </TableCell>
                   <TableCell className="text-[10px] text-muted-foreground">{timeAgo(sw.lastSeen)}</TableCell>
                 </TableRow>
@@ -3292,8 +3293,8 @@ function SwitchDetailDialog(props: {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <DetailKpi label="Ring In" value={fmtMbps(sw.ringInMbps ?? null)} icon={<ArrowRight className="size-3.5" />} color="text-primary" />
             <DetailKpi label="Ring Out" value={fmtMbps(sw.ringOutMbps ?? null)} icon={<ArrowRight className="size-3.5 rotate-180" />} color="text-primary" />
-            <DetailKpi label="CPU" value={sw.cpuUsage != null ? `${sw.cpuUsage.toFixed(1)}%` : "—"} icon={<Cpu className="size-3.5" />} color={sw.cpuUsage != null && sw.cpuUsage > 80 ? "text-crit" : "text-ok"} />
-            <DetailKpi label="Memory" value={sw.memoryUsage != null ? `${sw.memoryUsage.toFixed(1)}%` : "—"} icon={<MemoryStick className="size-3.5" />} color={sw.memoryUsage != null && sw.memoryUsage > 85 ? "text-crit" : "text-ok"} />
+            <DetailKpi label="Ports Up/Down" value={`${sw.portsUp} / ${sw.portsDown}`} icon={<LayoutGrid className="size-3.5" />} color={sw.portsDown > 0 ? "text-warn" : "text-ok"} />
+            <DetailKpi label="CDP Neighbors" value={`${sw.neighbors?.length ?? 0}`} icon={<Network className="size-3.5" />} color="text-primary" />
           </div>
 
           {/* Ring Position */}
@@ -3635,7 +3636,6 @@ function SwitchDetailDialog(props: {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <DetailField label="sysName" value={sw.sysName ?? "—"} mono />
               <DetailField label="Uptime" value={fmtUptime(sw.uptimeSeconds)} mono />
-              <DetailField label="Memory Used / Total" value={sw.memoryUsed != null && sw.memoryTotal != null ? `${(sw.memoryUsed / 1048576).toFixed(0)} / ${(sw.memoryTotal / 1048576).toFixed(0)} MB` : "—"} mono />
               <DetailField label="Ports Up / Down" value={`${sw.portsUp} / ${sw.portsDown}`} mono />
               <DetailField label="PoE Power" value={sw.power?.totalPoeWatts != null ? `${sw.power.totalPoeWatts.toFixed(1)} W` : "—"} mono />
               <div className="sm:col-span-2">
