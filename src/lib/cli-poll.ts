@@ -839,29 +839,37 @@ function parseShowPortsDetails(output: string): Array<Partial<ParsedInterface>> 
       if (/^[-\s]+$/.test(line.trim())) continue;
       // Skip empty lines
       if (!line.trim()) continue;
-      // Try to match a port line: "gi1       1G-Copper    Full    100   Enabled  Off  Up          Disabled Off"
-      // Allow port names like: gi1, gi10, te1, te2, etc.
-      const m = line.match(/^(\w+)\s+(\S+)\s+(\S+)\s+(\S+)\s+\S+\s+\S+\s+(\S+)/);
-      if (m) {
-        const portName = m[1];
-        const type = m[2];
-        const duplex = m[3];
-        const speed = m[4];
-        const state = m[5];
-        // Only accept if it looks like a port (gi1, te1, Po1, etc.)
-        if (/^(gi|te|tw|fa|hu|fo|Po|Ch)/i.test(portName)) {
-          let operStatus = 4;  // unknown
-          if (state.toLowerCase() === "up") operStatus = 1;
-          else if (state.toLowerCase() === "down") operStatus = 2;
-          ports.push({
-            ifName: portName,
-            ifDescr: `${type} ${duplex} ${speed}M`,
-            ifAlias: "",  // descriptions come from a different command
-            ifOperStatus: operStatus,
-            ifAdminStatus: 1,
-            ifHighSpeed: speed === "--" ? null : (parseInt(speed) || null),
-          });
+      // Try to match a port line. Handle both populated and unpopulated ports:
+      // "gi1       1G-Copper    Full    100   Enabled  Off  Up          Disabled Off"
+      // "gi25      1G-Fiber     Full    1000  Disabled Off  Up          Disabled Off"
+      // "gi26      1G-Fiber       --      --     --     --   Down          --     --"
+      // The regex needs to handle "--" values which don't match \S+ well.
+      // Split by 2+ whitespace instead.
+      const tokens = line.split(/\s{2,}/).map(t => t.trim()).filter(t => t);
+      if (tokens.length >= 5 && /^(gi|te|tw|fa|hu|fo|Po|Ch)/i.test(tokens[0])) {
+        const portName = tokens[0];
+        const type = tokens[1] || "";
+        const duplex = tokens[2] || "";
+        const speed = tokens[3] || "";
+        // State is the 7th column in the table (index 6), but with 2+ space split
+        // it might be at different positions. Look for "Up" or "Down" in the last few tokens.
+        let state = "";
+        for (let i = tokens.length - 1; i >= 0; i--) {
+          const t = tokens[i].toLowerCase();
+          if (t === "up" || t === "down") { state = tokens[i]; break; }
         }
+        if (!state) state = tokens[6] || tokens[tokens.length - 1] || "";
+        let operStatus = 4;
+        if (state.toLowerCase() === "up") operStatus = 1;
+        else if (state.toLowerCase() === "down") operStatus = 2;
+        ports.push({
+          ifName: portName,
+          ifDescr: `${type} ${duplex} ${speed === "--" ? "" : speed + "M"}`.trim(),
+          ifAlias: "",
+          ifOperStatus: operStatus,
+          ifAdminStatus: 1,
+          ifHighSpeed: speed === "--" ? null : (parseInt(speed) || null),
+        });
       }
     }
   }
