@@ -187,7 +187,7 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
     const setPerCmdTimer = () => {
       if (perCmdTimer) clearTimeout(perCmdTimer);
       perCmdTimer = setTimeout(() => {
-        if (cmdSentForCurrent) {
+        if (cmdSentForCurrent && shellStream) {
           console.warn(`[ssh] ${config.host}: command ${currentCmdIdx + 1}/${commands.length} TIMED OUT after ${perCmdTimeoutMs}ms — skipping to next`);
           // Save what we have so far for this command
           if (collectedOutput.trim()) {
@@ -197,14 +197,14 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
           currentCmdIdx++;
           if (currentCmdIdx >= commands.length) {
             clearTimeout(overallTimer);
-            try { stream.end(); } catch {}
+            try { shellStream.end(); } catch {}
             try { conn.end(); } catch {}
             resolve(results);
             return;
           }
           collectedOutput = "";
           cmdSentForCurrent = true;
-          stream.write(commands[currentCmdIdx] + "\n");
+          try { shellStream.write(commands[currentCmdIdx] + "\n"); } catch {}
           setPerCmdTimer();  // reset timer for next command
         }
       }, perCmdTimeoutMs);
@@ -310,10 +310,13 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
             return;
           }
 
-          // Handle --More-- paging (send space to continue)
-          if (/--\s*[Mm]ore\s*--/.test(collectedOutput.slice(-20))) {
+          // Handle paging prompts — send space to continue.
+          // Catalyst 1300: "More: <space>,  Quit: q or CTRL+Z, One line: <return>"
+          // Standard IOS: "--More--"
+          const last30 = collectedOutput.slice(-30);
+          if (/--\s*[Mm]ore\s*--/.test(last30) || /More:\s*<space>/.test(last30) || /Quit:\s*q\s/.test(last30)) {
             stream.write(" ");
-            collectedOutput = collectedOutput.replace(/--\s*[Mm]ore\s*--\s*$/, "");
+            collectedOutput = collectedOutput.replace(/(--\s*[Mm]ore\s*--|More:\s*<space>[^\n]*)\s*$/, "");
             return;
           }
 
