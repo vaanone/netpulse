@@ -18,9 +18,16 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const body = await req.json();
   const nextId = body.nextSwitchId || null;
   const ringId = body.ringId || null;
+  console.warn(`[switches PUT] id=${id} nextId=${nextId} ringId=${ringId}`);
+  // Validate ring membership — but ONLY if both switches have a ringId set.
+  // If either switch has no ring, allow the link (user might be setting up
+  // the ring topology step by step).
   if (ringId && nextId && nextId !== id) {
-    const nextSwitch = await db.switch.findUnique({ where: { id: nextId }, select: { ringId: true } });
-    if (nextSwitch && nextSwitch.ringId !== ringId) return NextResponse.json({ error: "Next switch in ring must belong to the same branch ring." }, { status: 400 });
+    const nextSwitch = await db.switch.findUnique({ where: { id: nextId }, select: { ringId: true, name: true } });
+    console.warn(`[switches PUT] next switch: ${nextSwitch?.name} ringId=${nextSwitch?.ringId}`);
+    if (nextSwitch && nextSwitch.ringId && nextSwitch.ringId !== ringId) {
+      return NextResponse.json({ error: `Next switch "${nextSwitch.name}" is in a different ring. Both switches must be in the same ring.` }, { status: 400 });
+    }
   }
   const baseData = {
     name: body.name, ipAddress: body.ipAddress, location: body.location ?? null,
@@ -40,13 +47,16 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (nextId && nextId !== id) {
     const existing = await db.switch.findFirst({ where: { nextSwitchId: nextId, NOT: { id } } });
     if (existing) {
+      console.warn(`[switches PUT] unlinking previous owner of nextId=${nextId}: ${existing.name}`);
       await db.switch.update({ where: { id: existing.id }, data: { nextSwitchId: null } });
       const updated = await db.switch.update({ where: { id }, data: baseData });
       await db.switch.update({ where: { id: existing.id }, data: { nextSwitchId: id } });
+      console.warn(`[switches PUT] ✓ saved with relink. nextSwitchId=${updated.nextSwitchId}`);
       return NextResponse.json(updated);
     }
   }
   const updated = await db.switch.update({ where: { id }, data: baseData });
+  console.warn(`[switches PUT] ✓ saved. nextSwitchId=${updated.nextSwitchId}`);
   return NextResponse.json(updated);
 }
 
