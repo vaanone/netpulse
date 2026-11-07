@@ -89,6 +89,9 @@ export async function POST(req: NextRequest) {
       let matchedSwitchName: string | null = null;
       let matchedBy: string | null = null;
 
+      console.warn(`[detect-neighbors] matching neighbor: deviceId=${JSON.stringify(n.deviceId)} address=${JSON.stringify(n.address)} devicePort=${n.devicePort}`);
+      console.warn(`[detect-neighbors] existing switches to match against: ${existingSwitches.map(s => `${s.name}/${s.ipAddress}`).join(", ")}`);
+
       // 1. Match by IP address (most reliable)
       if (n.address) {
         const byIp = existingSwitches.find(s => s.ipAddress === n.address);
@@ -142,6 +145,25 @@ export async function POST(req: NextRequest) {
           matchedSwitchName = byIpInDeviceId.name;
           matchedBy = "ip-in-deviceid";
         }
+      }
+      // 6. NEW: reverse substring — deviceId appears in switch name
+      // (handles cases where the switch name has extra prefix/suffix like "HPC1.local")
+      if (!matchedSwitchId && n.deviceId) {
+        const lowerId = n.deviceId.toLowerCase();
+        const byReverseContains = existingSwitches.find(s =>
+          s.name.toLowerCase().includes(lowerId) && lowerId.length >= 3
+        );
+        if (byReverseContains) {
+          matchedSwitchId = byReverseContains.id;
+          matchedSwitchName = byReverseContains.name;
+          matchedBy = "name-reverse-substring";
+        }
+      }
+
+      if (matchedSwitchId) {
+        console.warn(`[detect-neighbors] ✓ MATCHED by ${matchedBy}: ${n.deviceId} → ${matchedSwitchName}`);
+      } else {
+        console.warn(`[detect-neighbors] ✗ no match for ${n.deviceId}`);
       }
 
       return {
