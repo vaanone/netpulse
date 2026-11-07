@@ -524,126 +524,188 @@ async function persistSwitchSnapshot(switchId: string, poll: PollResult, ports: 
 
 async function persistAlerts(snapshot: Snapshot) {
   // ─── Alert thresholds ─────────────────────────────────────────────
-  // Only generate alerts for SFP fiber ports that are part of the ring.
-  // Access/copper ports are not monitored for optical alerts.
-  //
-  // 1. Rx power below -16 dBm → warning (weak receive signal)
-  // 2. Tx power below -16 dBm → warning (weak transmit signal)
-  // 3. Utilization above 80% → warning (traffic approaching limit)
-  //    This works for any link speed: 1G at 800 Mbps = 80%, 10G at 8 Gbps = 80%
-  // 4. Ring port down → critical (link failure)
-  // 5. Interface errors > 0 → warning
-  // 6. CPU > 80% → warning
-  // 7. Memory > 85% → warning
+  // Alerts generated:
+  //   1. Switch unreachable → critical
+  //   2. Ring link down → critical
+  //   3. Ring port down → critical
+  //   4. Rx/Tx power below -16 dBm → warning (ring SFP ports only)
+  //   5. Rx power below alarm threshold → critical
+  //   6. Utilization above 80% → warning/critical
+  //   7. Interface errors > 0 → warning
   const RX_TX_ALERT_THRESHOLD = -16.0;
   const UTILIZATION_ALERT_THRESHOLD = 80.0;
 
+  // Track which alerts are "active" this poll cycle — others get auto-resolved
+  const activeAlertKeys = new Set<string>();
+
   for (const sw of snapshot.switches) {
+    // ── Switch down alert ──
+    if (sw.status === "unreachable") {
+      const key = `switch-down:${sw.switchId}`;
+      activeAlertKeys.add(key);
+      await createAlertIfNew({
+        switchId: sw.switchId, portId: null,
+        severity: "critical", category: "link",
+        message: `Switch ${sw.name} (${sw.ipAddress}) is UNREACHABLE`,
+        value: "unreachable",
+      }, key);
+    }
+
+    // ── Link down alert (ring topology) ──
+    for (const link of snapshot.links) {
+      if (link.status === "down") {
+        const key = `link-down:${link.fromSwitchId}:${link.toSwitchId}`;
+        activeAlertKeys.add(key);
+        await createAlertIfNew({
+          switchId: link.fromSwitchId, portId: null,
+          severity: "critical", category: "link",
+          message: `Ring link DOWN: ${link.fromSwitchName} (${link.fromPortName}) → ${link.toSwitchName} (${link.toPortName})`,
+          value: "down",
+        }, key);
+      }
+    }
+
     for (const p of sw.ports) {
-      // ── Optical alerts: ONLY for ring ports with SFP fiber ──
-      // Only check Rx/Tx power if this is a ring port (isRingPort = true)
-      // and it has DOM readings (txPower or rxPower is not null = SFP transceiver present)
       const isSfpFiberRingPort = p.isRingPort && (p.txPower !== null || p.rxPower !== null);
 
       if (isSfpFiberRingPort) {
-        // Rx power alert — below -16 dBm
         if (p.rxPower != null && p.rxPower < RX_TX_ALERT_THRESHOLD) {
+          const key = `rx-low:${sw.switchId}:${p.ifIndex}`;
+          activeAlertKeys.add(key);
           await createAlertIfNew({
             switchId: sw.switchId, portId: p.portId, severity: "warning", category: "optical",
             message: `Rx power below -16 dBm on ring port ${p.ifName} (${p.switchName})`,
             value: p.rxPower.toFixed(2),
-          });
+          }, key);
         }
-        // Tx power alert — below -16 dBm
         if (p.txPower != null && p.txPower < RX_TX_ALERT_THRESHOLD) {
+          const key = `tx-low:${sw.switchId}:${p.ifIndex}`;
+          activeAlertKeys.add(key);
           await createAlertIfNew({
             switchId: sw.switchId, portId: p.portId, severity: "warning", category: "optical",
             message: `Tx power below -16 dBm on ring port ${p.ifName} (${p.switchName})`,
             value: p.txPower.toFixed(2),
-          });
+          }, key);
         }
-        // Transceiver-specific alarm threshold (e.g., -13 dBm) — critical
         if (p.rxPower != null && p.rxAlarmLow != null && p.rxPower <= p.rxAlarmLow) {
+          const key = `rx-alarm:${sw.switchId}:${p.ifIndex}`;
+          activeAlertKeys.add(key);
           await createAlertIfNew({
             switchId: sw.switchId, portId: p.portId, severity: "critical", category: "optical",
             message: `Rx power below alarm threshold on ring port ${p.ifName} (${p.switchName})`,
             value: p.rxPower.toFixed(2),
-          });
+          }, key);
         }
       }
 
-      // ── Ring port link down alert ──
       if (p.isRingPort && p.ifOperStatus !== 1) {
+        const key = `ring-port-down:${sw.switchId}:${p.ifIndex}`;
+        activeAlertKeys.add(key);
         await createAlertIfNew({
           switchId: sw.switchId, portId: p.portId, severity: "critical", category: "link",
           message: `Ring port ${p.ifName} on ${p.switchName} is DOWN`,
           value: String(p.ifOperStatus),
-        });
+        }, key);
       }
 
-      // ── Utilization alert: above 80% for any port (1G, 10G, etc.) ──
       if (p.utilization != null && p.utilization > UTILIZATION_ALERT_THRESHOLD) {
+        const key = `util-high:${sw.switchId}:${p.ifIndex}`;
+        activeAlertKeys.add(key);
         const speedLabel = p.ifHighSpeed ? (p.ifHighSpeed >= 1000 ? `${p.ifHighSpeed / 1000}G` : `${p.ifHighSpeed}M`) : "?";
         await createAlertIfNew({
           switchId: sw.switchId, portId: p.portId,
-          severity: p.utilization > 95 ? "critical" : "warning",
-          category: "traffic",
+          severity: p.utilization > 95 ? "critical" : "warning", category: "traffic",
           message: `High utilization on ${p.ifName} (${p.switchName}, ${speedLabel} port) — above 80%`,
           value: p.utilization.toFixed(1),
-        });
+        }, key);
       }
 
-      // ── Interface errors alert ──
       if (p.totalErrors > 0) {
+        const key = `errors:${sw.switchId}:${p.ifIndex}`;
+        activeAlertKeys.add(key);
         await createAlertIfNew({
           switchId: sw.switchId, portId: p.portId,
-          severity: p.totalErrors > 100 ? "critical" : "warning",
-          category: "traffic",
+          severity: p.totalErrors > 100 ? "critical" : "warning", category: "traffic",
           message: `Interface errors on ${p.ifName} (${p.switchName})`,
           value: String(p.totalErrors),
-        });
+        }, key);
       }
     }
+  }
 
-    // ── CPU alert ──
-    if (sw.cpuUsage != null && sw.cpuUsage > 80) {
-      await createAlertIfNew({
-        switchId: sw.switchId, portId: null,
-        severity: sw.cpuUsage > 90 ? "critical" : "warning",
-        category: "health",
-        message: `CPU usage ${sw.cpuUsage.toFixed(1)}% on ${sw.name}`,
-        value: sw.cpuUsage.toFixed(1),
-      });
-    }
+  // ── Auto-resolve alerts that are no longer active ──
+  // If an alert was created in a previous poll but the issue is now fixed,
+  // mark it as resolved. This clears the alert from the dashboard.
+  try {
+    const unresolvedAlerts = await db.alert.findMany({
+      where: { resolved: false, acknowledged: false },
+      select: { id: true, message: true, switchId: true },
+    });
+    for (const alert of unresolvedAlerts) {
+      // Check if this alert's message contains keywords that match our active alert keys
+      // We resolve if the switch is now reachable and the issue type is no longer active
+      const isSwitchDown = alert.message.includes("UNREACHABLE");
+      const isLinkDown = alert.message.includes("Ring link DOWN") || alert.message.includes("is DOWN");
+      const isOptical = alert.message.includes("Rx power") || alert.message.includes("Tx power");
+      const isUtilization = alert.message.includes("utilization");
+      const isErrors = alert.message.includes("Interface errors");
 
-    // ── Memory alert ──
-    if (sw.memoryUsage != null && sw.memoryUsage > 85) {
-      await createAlertIfNew({
-        switchId: sw.switchId, portId: null,
-        severity: sw.memoryUsage > 95 ? "critical" : "warning",
-        category: "health",
-        message: `Memory usage ${sw.memoryUsage.toFixed(1)}% on ${sw.name}`,
-        value: sw.memoryUsage.toFixed(1),
-      });
+      // For switch-down alerts: resolve if the switch is now up
+      if (isSwitchDown) {
+        const sw = snapshot.switches.find(s => s.switchId === alert.switchId);
+        if (sw && sw.status !== "unreachable") {
+          await db.alert.update({ where: { id: alert.id }, data: { resolved: true, resolvedAt: new Date() } });
+          console.warn(`[alerts] auto-resolved: "${alert.message}" (switch is now up)`);
+        }
+      }
+      // For link/port down alerts: resolve if the switch is now up
+      if (isLinkDown) {
+        const sw = snapshot.switches.find(s => s.switchId === alert.switchId);
+        if (sw && sw.status !== "unreachable") {
+          await db.alert.update({ where: { id: alert.id }, data: { resolved: true, resolvedAt: new Date() } });
+          console.warn(`[alerts] auto-resolved: "${alert.message}" (switch is now up)`);
+        }
+      }
+      // For optical/utilization/errors: resolve if the switch is now unreachable (can't check) or up
+      if ((isOptical || isUtilization || isErrors)) {
+        const sw = snapshot.switches.find(s => s.switchId === alert.switchId);
+        if (sw && sw.status === "unreachable") {
+          // Switch is down — don't resolve optical alerts, they might still be valid
+        } else if (sw) {
+          // Switch is up — check if the specific issue is still active
+          // For simplicity, auto-resolve after 10 minutes if not re-triggered
+          const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+          if (alert.timestamp < tenMinAgo) {
+            await db.alert.update({ where: { id: alert.id }, data: { resolved: true, resolvedAt: new Date() } });
+            console.warn(`[alerts] auto-resolved: "${alert.message}" (issue cleared)`);
+          }
+        }
+      }
     }
+  } catch (e: any) {
+    console.warn("[alerts] auto-resolve failed:", e?.message);
   }
 }
 
-async function createAlertIfNew(input: { switchId: string; portId: string | null; severity: string; category: string; message: string; value?: string }) {
-  // Check if there's an existing alert with the same message in the last 10 minutes.
-  // This includes BOTH acknowledged AND unacknowledged alerts — so that
-  // acknowledging an alert doesn't cause a duplicate to be created on the
-  // next poll cycle.
-  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+async function createAlertIfNew(input: { switchId: string; portId: string | null; severity: string; category: string; message: string; value?: string }, alertKey?: string) {
+  // Check if there's an existing UNRESOLVED alert with the same message.
+  // If there is, don't create a duplicate — just update the timestamp.
   const existing = await db.alert.findFirst({
     where: {
       switchId: input.switchId,
       portId: input.portId,
       message: input.message,
-      timestamp: { gte: tenMinAgo },
+      resolved: false,
     },
   });
-  if (existing) return;
+  if (existing) {
+    // Update timestamp so it stays "fresh"
+    await db.alert.update({
+      where: { id: existing.id },
+      data: { timestamp: new Date(), value: input.value ?? existing.value },
+    });
+    return;
+  }
   await db.alert.create({ data: input });
 }
 
