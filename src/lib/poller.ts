@@ -147,7 +147,35 @@ export async function runPollCycle(): Promise<Snapshot> {
         if (n.address) { const byIp = otherSwitches.find((s) => s.ipAddress === n.address); if (byIp) { matchedId = byIp.id; matchedName = byIp.name; matchedIp = byIp.ipAddress; } }
         if (!matchedId && n.deviceId) { const byName = otherSwitches.find((s) => s.name.toLowerCase() === n.deviceId.toLowerCase()); if (byName) { matchedId = byName.id; matchedName = byName.name; matchedIp = byName.ipAddress; } }
         if (!matchedId && n.deviceId) { const lowerId = n.deviceId.toLowerCase(); const bySuffix = otherSwitches.find((s) => lowerId.startsWith(s.name.toLowerCase() + ".") || lowerId === s.name.toLowerCase()); if (bySuffix) { matchedId = bySuffix.id; matchedName = bySuffix.name; matchedIp = bySuffix.ipAddress; } }
-        return { localIfIndex: n.localIfIndex, localIfName: ifNameByIfIndex.get(n.localIfIndex) ?? null, deviceId: n.deviceId, devicePort: n.devicePort, address: n.address, platform: n.platform, protocol: n.protocol, matchedSwitchId: matchedId, matchedSwitchName: matchedName, matchedSwitchIp: matchedIp };
+        // For SSH-discovered neighbors, localIfIndex is 0 (we don't know the real ifIndex).
+        // Try to find the matching interface by name (e.g. "gi25" → ifIndex 25)
+        let resolvedIfIndex = n.localIfIndex;
+        let resolvedIfName = ifNameByIfIndex.get(n.localIfIndex) ?? null;
+        if ((!resolvedIfName || resolvedIfIndex === 0) && (n as any).localIfName) {
+          // Try to find an interface whose name matches localIfName
+          const ifaceByName = poll.interfaces.find((i) =>
+            i.ifName && i.ifName.toLowerCase() === String((n as any).localIfName).toLowerCase()
+          );
+          if (ifaceByName) {
+            resolvedIfIndex = ifaceByName.ifIndex;
+            resolvedIfName = ifaceByName.ifName;
+          } else {
+            // Even if we can't resolve the ifIndex, keep the name for display
+            resolvedIfName = (n as any).localIfName;
+          }
+        }
+        return {
+          localIfIndex: resolvedIfIndex,
+          localIfName: resolvedIfName,
+          deviceId: n.deviceId,
+          devicePort: n.devicePort,
+          address: n.address,
+          platform: n.platform,
+          protocol: n.protocol,
+          matchedSwitchId: matchedId,
+          matchedSwitchName: matchedName,
+          matchedSwitchIp: matchedIp,
+        };
       });
 
       const remoteSwitch = sw.nextSwitchId ? switchById.get(sw.nextSwitchId) ?? null : null;
