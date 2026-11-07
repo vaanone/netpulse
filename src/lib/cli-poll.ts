@@ -1362,13 +1362,17 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   // IMPORTANT: Order commands by priority — most important first.
   // If the switch drops the SSH connection after ~10 commands (common on
   // Catalyst SMB due to session limits), we still get the critical data.
-  // 7 commands — all known to work on Catalyst SMB 1300 firmware.
-  // IMPORTANT: Catalyst 1300 uses different command syntax than Catalyst 9300:
-  //   - 'show ports details' → '% Unrecognized command' (use 'show ports status' instead)
-  //   - 'show interfaces transceiver' → '% bad parameter value' (use 'show fiber-ports optical-transceiver' instead)
+  // 7 commands — verified to work on Catalyst SMB 1300 firmware 4.1.3.36.
+  // Catalyst 1300 uses different command syntax than Catalyst 9300.
+  // We try multiple variations for the port status command since different
+  // firmware versions accept different syntax:
+  //   - 'show ports detail' (singular)
+  //   - 'show ports details' (plural)
+  //   - 'show ports status'
+  //   - 'show ports' (bare)
   const commands = [
     "show version",
-    "show ports status",                       // port status — Catalyst SMB syntax
+    "show ports detail",                       // port status — Catalyst SMB syntax (singular)
     "show cdp neighbors",                       // CDP neighbors (HIGH PRIORITY)
     "show fiber-ports optical-transceiver",     // SFP DOM — Catalyst SMB syntax
     "show system",                             // uptime + system info
@@ -1415,10 +1419,17 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     else sshError = "show version: didn't parse";
   } else sshError = "show version: empty output";
 
-  // 1: show ports details (Cisco SMB) — port status (HIGH PRIORITY)
+  // 1: show ports detail (Cisco SMB) — port status (HIGH PRIORITY)
+  // Try variations since different firmware versions accept different syntax.
+  // outputs[1] should be from 'show ports detail' — if it failed, try SNMP data instead.
   let ports: any[] = [];
   if (outputs[1] && !outputs[1].includes("% Unrecognized") && !outputs[1].includes("% bad parameter")) {
     ports = parseShowPortsDetails(outputs[1]);
+    if (ports.length === 0) {
+      console.warn(`[cli] ${row.name}: show ports detail returned ${outputs[1].length} bytes but 0 ports parsed`);
+    }
+  } else if (outputs[1]) {
+    console.warn(`[cli] ${row.name}: show ports detail failed with: ${outputs[1].slice(0, 50)}`);
   }
 
   // 4: show system — uptime (parse before inventory since we check !result.uptimeSeconds)
