@@ -1128,55 +1128,54 @@ function parseShowInterfacesTransceiver(output: string): {
 } {
   const domReadings: Record<number, any> = {};
   const transceivers: any[] = [];
-  // We return a map from ifName → temporary ifIndex. The caller will replace
-  // this with real ifIndex once we know it. For now, use 1-based counting.
   const ifIndexByIfName = new Map<string, number>();
-
-  // Try Cisco SMB table format first
-  // Port      Temperature  Voltage  Current  Optical TX    Optical RX
-  // -------   -----------  -------  -------  -----------   -----------
-  // gi25      33.23 C      3.29 V   7.65 mA  -2.34 dBm     -3.45 dBm
+  let tempIfIndex = 1000;
   const lines = output.split("\n");
+
+  // ─── Format 1: Catalyst 1300 multi-line header (user confirmed) ───
+  //   Port       Temp   Voltage Current Output   Input  LOS
+  //   [C]    [Volt]   [mA]    Power    Power  
+  //   [mWatt]  [mWatt] 
+  //   -----------  ------  -------  -------  -------  -------  ---
+  //   gi25      44    3.25    15.16   0.27    0.30   No
+  //   gi26     N/A    N/A     N/A     N/A     N/A   N/A
   let inTable = false;
-  let tempIfIndex = 1000;  // arbitrary start for DOM readings
+  let headerLinesSeen = 0;
   for (const line of lines) {
-    // Detect header
-    if (/Port\s+Temperature\s+Voltage\s+Current/i.test(line) && !inTable) {
+    if (!inTable && /Port\s+Temp\s+Voltage/i.test(line)) {
       inTable = true;
+      headerLinesSeen = 1;
+      continue;
+    }
+    if (inTable && headerLinesSeen < 4) {
+      headerLinesSeen++;
       continue;
     }
     if (inTable) {
-      // Skip separator
-      if (/^-+\s+-+/i.test(line.trim())) continue;
-      if (!line.trim()) { inTable = false; continue; }
-      // Try to match: gi25  33.23 C  3.29 V  7.65 mA  -2.34 dBm  -3.45 dBm
-      const m = line.match(/^(\w+)\s+([\d.]+)\s*C\s+([\d.]+)\s*V\s+([\d.]+)\s*mA\s+(-?[\d.]+)\s*dBm\s+(-?[\d.]+)\s*dBm/i);
-      if (m) {
-        const ifName = m[1];
-        const temp = parseFloat(m[2]);
-        const voltage = parseFloat(m[3]);
-        const biasCurrent = parseFloat(m[4]);
-        const txPower = parseFloat(m[5]);
-        const rxPower = parseFloat(m[6]);
-        const ifIndex = ++tempIfIndex;
-        ifIndexByIfName.set(ifName.toLowerCase(), ifIndex);
-        domReadings[ifIndex] = {
-          temperature: temp,
-          voltage,
-          biasCurrent,
-          txPower,
-          rxPower,
-        };
-        transceivers.push({
-          entityIndex: ifIndex,
-          name: ifName,
-          descr: "SFP",
-          modelName: null,
-          serialNum: null,
-          parentEntityIndex: 0,
-          ifIndex,
-        });
-        continue;
+      if (/^[-\s]+$/.test(line.trim()) || !line.trim()) continue;
+      if (/Temp\s+-.*Internally/i.test(line) || /N\/A\s+-.*Not Available/i.test(line)) { inTable = false; continue; }
+      const tokens = line.trim().split(/\s+/);
+      if (tokens.length >= 6) {
+        const portName = tokens[0];
+        if (/^(gi|te|tw|fa|hu|fo)/i.test(portName)) {
+          const temp = parseFloat(tokens[1]);
+          const voltage = parseFloat(tokens[2]);
+          const biasCurrent = parseFloat(tokens[3]);
+          const outputPowerMw = parseFloat(tokens[4]);
+          const inputPowerMw = parseFloat(tokens[5]);
+          // Convert mW to dBm: dBm = 10 * log10(mW)
+          const txPower = !isNaN(outputPowerMw) && outputPowerMw > 0 ? 10 * Math.log10(outputPowerMw) : null;
+          const rxPower = !isNaN(inputPowerMw) && inputPowerMw > 0 ? 10 * Math.log10(inputPowerMw) : null;
+          const ifIndex = ++tempIfIndex;
+          ifIndexByIfName.set(portName.toLowerCase(), ifIndex);
+          domReadings[ifIndex] = {
+            temperature: !isNaN(temp) ? temp : null,
+            voltage: !isNaN(voltage) ? voltage : null,
+            biasCurrent: !isNaN(biasCurrent) ? biasCurrent : null,
+            txPower, rxPower,
+          };
+          transceivers.push({ entityIndex: ifIndex, name: portName, descr: "SFP", modelName: null, serialNum: null, parentEntityIndex: 0, ifIndex });
+        }
       }
     }
   }
@@ -1184,66 +1183,25 @@ function parseShowInterfacesTransceiver(output: string): {
     return { domReadings, transceivers, ifIndexByIfName };
   }
 
-  // Fall back to IOS-XE per-block format
-  // If device is externally calibrated.
-  // PRBS_ERR: 0
-  // Temperature: 33.23 C
-  // Voltage: 3.29 V
-  // Current: 7.65 mA
-  // Optical Tx Power: -2.34 dBm
-  // Optical Rx Power: -3.45 dBm
-  // Note: Each block starts with the interface name on its own line
-  let currentIfName: string | null = null;
-  let currentReading: any = {};
+  // ─── Format 2: single-line header with inline units ───
+  inTable = false;
   for (const line of lines) {
-    // Look for interface name on its own line: "Gi1/0/1" or "Te1/0/1"
-    const ifMatch = line.match(/^(\w+(?:\/\d+)+)\s*$/);
-    if (ifMatch) {
-      // Save previous block if any
-      if (currentIfName && (currentReading.temperature != null || currentReading.txPower != null)) {
-        const ifIndex = ++tempIfIndex;
-        ifIndexByIfName.set(currentIfName.toLowerCase(), ifIndex);
-        domReadings[ifIndex] = currentReading;
-        transceivers.push({
-          entityIndex: ifIndex,
-          name: currentIfName,
-          descr: "SFP",
-          modelName: null,
-          serialNum: null,
-          parentEntityIndex: 0,
-          ifIndex,
-        });
-      }
-      currentIfName = ifMatch[1];
-      currentReading = {};
+    if (/Port\s+Temperature\s+Voltage\s+Current/i.test(line) && !inTable) {
+      inTable = true;
       continue;
     }
-    if (!currentIfName) continue;
-    const tempMatch = line.match(/Temperature:\s*(-?[\d.]+)\s*C/i);
-    if (tempMatch) { currentReading.temperature = parseFloat(tempMatch[1]); continue; }
-    const voltMatch = line.match(/Voltage:\s*(-?[\d.]+)\s*V/i);
-    if (voltMatch) { currentReading.voltage = parseFloat(voltMatch[1]); continue; }
-    const currMatch = line.match(/Current:\s*(-?[\d.]+)\s*mA/i);
-    if (currMatch) { currentReading.biasCurrent = parseFloat(currMatch[1]); continue; }
-    const txMatch = line.match(/Optical Tx Power:\s*(-?[\d.]+)\s*dBm/i);
-    if (txMatch) { currentReading.txPower = parseFloat(txMatch[1]); continue; }
-    const rxMatch = line.match(/Optical Rx Power:\s*(-?[\d.]+)\s*dBm/i);
-    if (rxMatch) { currentReading.rxPower = parseFloat(rxMatch[1]); continue; }
-  }
-  // Save the last block
-  if (currentIfName && (currentReading.temperature != null || currentReading.txPower != null)) {
-    const ifIndex = ++tempIfIndex;
-    ifIndexByIfName.set(currentIfName.toLowerCase(), ifIndex);
-    domReadings[ifIndex] = currentReading;
-    transceivers.push({
-      entityIndex: ifIndex,
-      name: currentIfName,
-      descr: "SFP",
-      modelName: null,
-      serialNum: null,
-      parentEntityIndex: 0,
-      ifIndex,
-    });
+    if (inTable) {
+      if (/^-+\s+-+/i.test(line.trim())) continue;
+      if (!line.trim()) { inTable = false; continue; }
+      const m = line.match(/^(\w+)\s+([\d.]+)\s*C\s+([\d.]+)\s*V\s+([\d.]+)\s*mA\s+(-?[\d.]+)\s*dBm\s+(-?[\d.]+)\s*dBm/i);
+      if (m) {
+        const ifName = m[1];
+        const ifIndex = ++tempIfIndex;
+        ifIndexByIfName.set(ifName.toLowerCase(), ifIndex);
+        domReadings[ifIndex] = { temperature: parseFloat(m[2]), voltage: parseFloat(m[3]), biasCurrent: parseFloat(m[4]), txPower: parseFloat(m[5]), rxPower: parseFloat(m[6]) };
+        transceivers.push({ entityIndex: ifIndex, name: ifName, descr: "SFP", ifIndex });
+      }
+    }
   }
 
   return { domReadings, transceivers, ifIndexByIfName };
