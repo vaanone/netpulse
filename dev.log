@@ -8,3 +8,8 @@ $ next dev -p 3000
 ✓ Ready in 645ms
 ○ Compiling / ...
  GET / 200 in 3.8s (compile: 3.5s, render: 371ms)
+ GET /api/metrics 200 in 120ms (compile: 112ms, render: 8ms)
+ GET /api/companies 200 in 200ms (compile: 72ms, render: 128ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 198ms (compile: 143ms, render: 55ms)
+ GET /api/rings 200 in 201ms (compile: 165ms, render: 37ms)
+ GET /api/switches 200 in 203ms (compile: 186ms, render: 16ms)
