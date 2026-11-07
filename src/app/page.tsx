@@ -540,21 +540,22 @@ export default function Home() {
   // --- Poll Now mutation ---
   const pollMut = useMutation({
     mutationFn: async () => {
-      const r = await fetch("/api/poll", { method: "POST" });
-      if (!r.ok) throw new Error("Poll failed");
-      return r.json();
+      // Set a 3-minute timeout — SSH polls can take up to 2 minutes
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 180_000);
+      try {
+        const r = await fetch("/api/poll", { method: "POST", signal: controller.signal });
+        if (!r.ok) throw new Error("Poll failed");
+        return r.json();
+      } finally {
+        clearTimeout(timeout);
+      }
     },
     onSuccess: (data) => {
       toast.success("Poll cycle completed", {
         description: `${data.switchCount} switches polled, ${data.linkCount} links found.`,
       });
       // Invalidate ALL queries so the dashboard fully refreshes with new data.
-      // This includes:
-      // - ["metrics"] — switch/port/SFP DOM/CDP data from the snapshot
-      // - ["switches"] — nextSwitchId might have changed (auto-pair via CDP)
-      // - ["alerts"] — new alerts from the poll
-      // - ["alerts-all"] — alert history
-      // - ["rings"] — ring topology might have changed
       queueMicrotask(() => {
         queryClient.invalidateQueries({ queryKey: ["metrics"] });
         queryClient.invalidateQueries({ queryKey: ["switches"] });
