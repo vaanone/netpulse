@@ -2732,9 +2732,16 @@ function SwitchFormDialog(props: {
     mutationFn: async (body: any) => {
       const url = editing ? `/api/switches/${editing.id}` : "/api/switches";
       const method = editing ? "PUT" : "POST";
+      console.log("[saveMut] sending to", url, "with body.nextSwitchId =", body.nextSwitchId);
       const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed"); }
-      return r.json();
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        console.error("[saveMut] save failed:", r.status, e);
+        throw new Error(e.error ?? `Save failed with status ${r.status}`);
+      }
+      const data = await r.json();
+      console.log("[saveMut] response nextSwitchId:", data.nextSwitchId);
+      return data;
     },
     onSuccess: () => {
       toast.success(editing ? "Switch updated" : "Switch added");
@@ -2772,11 +2779,13 @@ function SwitchFormDialog(props: {
       toast.error("Name and IP address are required");
       return;
     }
+    const payload = buildPayload();
+    console.log("[handleSubmit] payload being sent:", { ...payload, nextSwitchId: payload.nextSwitchId, ringId: payload.ringId });
     if (editing) {
       // editing requires destructive gate
       setGate(true);
     } else {
-      saveMut.mutate(buildPayload());
+      saveMut.mutate(payload);
     }
   }
 
