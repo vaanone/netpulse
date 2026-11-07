@@ -69,8 +69,14 @@ const POLL_INTERVAL_MS = 30_000;
 const SSH_CACHE = new Map<string, { result: PollResult; ts: number }>();
 const SSH_CACHE_TTL_MS = 120_000;  // 2 minutes — re-run SSH every 4th poll cycle
 
-export async function runPollCycle(): Promise<Snapshot> {
-  if (POLLING) return CURRENT;
+export async function runPollCycle(force: boolean = false): Promise<Snapshot> {
+  if (POLLING && !force) return CURRENT;
+  if (POLLING && force) {
+    // Wait for the existing poll to finish, then return the new snapshot
+    let waited = 0;
+    while (POLLING && waited < 180_000) { await new Promise(r => setTimeout(r, 500)); waited += 500; }
+    return CURRENT;
+  }
   POLLING = true;
   try {
     const switches = await db.switch.findMany({

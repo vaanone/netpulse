@@ -544,12 +544,23 @@ export default function Home() {
       if (!r.ok) throw new Error("Poll failed");
       return r.json();
     },
-    onSuccess: () => {
-      toast.success("Poll cycle completed", { description: "Snapshot refreshed from devices." });
+    onSuccess: (data) => {
+      toast.success("Poll cycle completed", {
+        description: `${data.switchCount} switches polled, ${data.linkCount} links found.`,
+      });
+      // Invalidate ALL queries so the dashboard fully refreshes with new data.
+      // This includes:
+      // - ["metrics"] — switch/port/SFP DOM/CDP data from the snapshot
+      // - ["switches"] — nextSwitchId might have changed (auto-pair via CDP)
+      // - ["alerts"] — new alerts from the poll
+      // - ["alerts-all"] — alert history
+      // - ["rings"] — ring topology might have changed
       queueMicrotask(() => {
         queryClient.invalidateQueries({ queryKey: ["metrics"] });
+        queryClient.invalidateQueries({ queryKey: ["switches"] });
         queryClient.invalidateQueries({ queryKey: ["alerts"] });
         queryClient.invalidateQueries({ queryKey: ["alerts-all"] });
+        queryClient.invalidateQueries({ queryKey: ["rings"] });
       });
     },
     onError: (e: Error) => toast.error("Poll failed", { description: e.message }),
