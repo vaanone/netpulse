@@ -264,10 +264,26 @@ export async function runPollCycle(): Promise<Snapshot> {
       const inMbps = fromPort?.inMbps ?? 0, outMbps = fromPort?.outMbps ?? 0, utilization = fromPort?.utilization ?? 0;
       const rxPowerA = fromPort?.rxPower ?? null, rxPowerB = toPort?.rxPower ?? null, txPowerA = fromPort?.txPower ?? null, txPowerB = toPort?.txPower ?? null;
       let health: "ok" | "warning" | "critical" = "ok";
-      if (fromPort?.ifOperStatus !== 1 || toPort?.ifOperStatus !== 1) health = "critical";
-      else if (rxPowerA != null && fromPort?.rxAlarmLow != null && rxPowerA <= fromPort.rxAlarmLow) health = "critical";
-      else if (rxPowerB != null && toPort?.rxAlarmLow != null && rxPowerB <= toPort.rxAlarmLow) health = "critical";
-      else if ((fromPort?.opticalMargin ?? 99) < 3 || (toPort?.opticalMargin ?? 99) < 3) health = "warning";
+      // Determine link status based on what we actually know:
+      // 1. If we have ringPort data on both ends AND either is DOWN → critical
+      // 2. If we have ringPort data AND Rx power is below alarm threshold → critical
+      // 3. If we have NO ringPort data (CDP not yet detected) — fall back to switch status:
+      //    if both switches are 'up', the link is 'up' (assume connected)
+      //    if either switch is unreachable, the link is 'down'
+      // This prevents the link from showing as 'down' when SNMP/SSH returns ports
+      // but CDP-based ringPort detection hasn't completed yet.
+      if (fromPort && toPort) {
+        // We have ring port data on both ends — check normally
+        if (fromPort.ifOperStatus !== 1 || toPort.ifOperStatus !== 1) health = "critical";
+        else if (rxPowerA != null && fromPort.rxAlarmLow != null && rxPowerA <= fromPort.rxAlarmLow) health = "critical";
+        else if (rxPowerB != null && toPort.rxAlarmLow != null && rxPowerB <= toPort.rxAlarmLow) health = "critical";
+        else if ((fromPort.opticalMargin ?? 99) < 3 || (toPort.opticalMargin ?? 99) < 3) health = "warning";
+      } else {
+        // No ring port data — base link status on switch reachability
+        // (SNMP may be working but CDP neighbor not yet detected for ringPort)
+        if (sw.status === "unreachable" || next.status === "unreachable") health = "critical";
+        else health = "ok";  // both switches reachable → assume link is up
+      }
       links.push({ id: `${sw.switchId}:${next.switchId}`, fromSwitchId: sw.switchId, fromSwitchName: sw.name, fromPortName: fromPort?.ifName ?? "?", toSwitchId: next.switchId, toSwitchName: next.name, toPortName: toPort?.ifName ?? "?", status: health === "critical" ? "down" : "up", inMbps, outMbps, utilization, rxPowerA, rxPowerB, txPowerA, txPowerB, health });
     }
     CURRENT = { switches: snapshots, links, polledAt: new Date() };
