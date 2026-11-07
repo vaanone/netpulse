@@ -63,6 +63,12 @@ let POLLING = false;
 let TIMER: NodeJS.Timeout | null = null;
 const POLL_INTERVAL_MS = 30_000;
 
+// Cache SSH/CLI results — only re-run SSH every 2 minutes, not every 30 seconds.
+// SSH sessions take ~70 seconds per switch, so running every 30s blocks the dashboard.
+// Between SSH polls, we use cached SSH data + fresh SNMP data (which is fast).
+const SSH_CACHE = new Map<string, { result: PollResult; ts: number }>();
+const SSH_CACHE_TTL_MS = 120_000;  // 2 minutes — re-run SSH every 4th poll cycle
+
 export async function runPollCycle(): Promise<Snapshot> {
   if (POLLING) return CURRENT;
   POLLING = true;
@@ -76,75 +82,88 @@ export async function runPollCycle(): Promise<Snapshot> {
     const results = await Promise.allSettled(switches.map(async (sw) => {
       try {
         let poll = await pollSwitch(sw);
-        // ─── SSH/Telnet CLI fallback ───
-        // If the switch has CLI fallback enabled with credentials, ALWAYS try SSH/Telnet
-        // and MERGE the results. SNMP on Catalyst SMB switches may return interfaces
-        // but NOT SFP DOM readings, proper CDP neighbor names (SysName), or port
-        // descriptions. SSH gives us all of these.
-        //
-        // Strategy: run SSH if enabled, then merge — prefer SSH data for:
-        //   - interfaces (port status with UP/DOWN)
-        //   - domReadings (SFP Tx/Rx power, temperature, voltage)
-        //   - transceivers (part numbers, serials)
-        //   - neighbors (CDP with SysName and IP address)
-        //   - sysDescr (if SSH provided one)
-        //   - uptimeSeconds (if SSH provided one)
-        // Prefer SNMP data for:
-        //   - counters (ifHCInOctets, ifHCOutOctets) — SNMP is better for traffic data
+        // ─── SSH/Telnet CLI fallback (cached) ───
+        // SSH sessions take ~70 seconds per switch. Running every 30s would block
+        // the dashboard. Instead, cache SSH results for 2 minutes.
+        // On the first poll, SSH runs (takes 70s). On subsequent polls within 2 min,
+        // we use the cached SSH result + fresh SNMP data (which takes ~5s).
+        // This makes the dashboard load in ~10 seconds instead of 5 minutes.
         if (sw.sshEnabled && sw.sshUsername && sw.sshPassword) {
           const proto = (sw as any).cliProtocol === "telnet" ? "telnet" : "ssh";
           const port = sw.sshPort ?? (proto === "telnet" ? 23 : 22);
-          console.warn(`[poller] ${sw.name}: SSH/Telnet enabled — running CLI poll (${proto.toUpperCase()} ${sw.sshUsername}@${sw.ipAddress}:${port})`);
-          try {
-            const sshResult = await pollSwitchViaSsh(sw);
-            if (sshResult) {
-              // If SSH returned MORE data than SNMP (or SNMP failed entirely), use SSH
-              const sshHasBetterData =
-                sshResult.interfaces.length > 0 ||
-                Object.keys(sshResult.domReadings || {}).length > 0 ||
-                sshResult.neighbors.length > 0 ||
-                !poll.reachable;
-
-              if (sshHasBetterData) {
-                // Merge: preserve SNMP sysDescr/sysName/uptime if SSH didn't get them
-                if (!sshResult.sysDescr && poll.sysDescr) sshResult.sysDescr = poll.sysDescr;
-                if (!sshResult.sysName && poll.sysName) sshResult.sysName = poll.sysName;
-                if (!sshResult.uptimeSeconds && poll.uptimeSeconds) sshResult.uptimeSeconds = poll.uptimeSeconds;
-
-                // If SNMP returned interfaces with counters but SSH returned interfaces
-                // without counters, try to merge counters from SNMP into SSH interfaces
-                if (sshResult.interfaces.length > 0 && poll.interfaces.length > 0) {
-                  const snmpByIfName = new Map<string, any>();
-                  for (const iface of poll.interfaces) {
-                    if (iface.ifName) snmpByIfName.set(iface.ifName.toLowerCase(), iface);
-                  }
-                  for (const sshIface of sshResult.interfaces) {
-                    const snmpIface = snmpByIfName.get((sshIface.ifName || "").toLowerCase());
-                    if (snmpIface) {
-                      // Copy traffic counters from SNMP if SSH doesn't have them
-                      if (sshIface.ifInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifInOctets = snmpIface.ifHCInOctets;
-                      if (sshIface.ifOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifOutOctets = snmpIface.ifHCOutOctets;
-                      if (sshIface.ifHCInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifHCInOctets = snmpIface.ifHCInOctets;
-                      if (sshIface.ifHCOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifHCOutOctets = snmpIface.ifHCOutOctets;
-                      if (sshIface.ifInErrors == null && snmpIface.ifInErrors != null) sshIface.ifInErrors = snmpIface.ifInErrors;
-                      if (sshIface.ifOutErrors == null && snmpIface.ifOutErrors != null) sshIface.ifOutErrors = snmpIface.ifOutErrors;
-                    }
-                  }
+          // Check cache — skip SSH if we have a recent result
+          const cached = SSH_CACHE.get(sw.id);
+          const cacheAge = cached ? now - cached.ts : Infinity;
+          if (cached && cacheAge < SSH_CACHE_TTL_MS) {
+            // Use cached SSH result + fresh SNMP data
+            console.warn(`[poller] ${sw.name}: using cached SSH data (${Math.round(cacheAge / 1000)}s old)`);
+            const sshResult = cached.result;
+            // Merge cached SSH with fresh SNMP (for traffic counters)
+            if (!sshResult.sysDescr && poll.sysDescr) sshResult.sysDescr = poll.sysDescr;
+            if (!sshResult.sysName && poll.sysName) sshResult.sysName = poll.sysName;
+            if (!sshResult.uptimeSeconds && poll.uptimeSeconds) sshResult.uptimeSeconds = poll.uptimeSeconds;
+            // Merge SNMP counters into cached SSH interfaces
+            if (sshResult.interfaces.length > 0 && poll.interfaces.length > 0) {
+              const snmpByIfName = new Map<string, any>();
+              for (const iface of poll.interfaces) {
+                if (iface.ifName) snmpByIfName.set(iface.ifName.toLowerCase(), iface);
+              }
+              for (const sshIface of sshResult.interfaces) {
+                const snmpIface = snmpByIfName.get((sshIface.ifName || "").toLowerCase());
+                if (snmpIface) {
+                  if (sshIface.ifInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifInOctets = snmpIface.ifHCInOctets;
+                  if (sshIface.ifOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifOutOctets = snmpIface.ifHCOutOctets;
+                  if (sshIface.ifHCInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifHCInOctets = snmpIface.ifHCInOctets;
+                  if (sshIface.ifHCOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifHCOutOctets = snmpIface.ifHCOutOctets;
                 }
-
-                // Mark as reachable so persistence code runs and writes to DB
-                sshResult.reachable = true;
-                sshResult.error = `Data via ${proto.toUpperCase()} CLI. ${sshResult.error ?? ""}`;
-                poll = sshResult;
-                console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll succeeded — interfaces=${poll.interfaces.length} neighbors=${poll.neighbors.length} dom=${Object.keys(poll.domReadings).length} uptime=${poll.uptimeSeconds}s`);
-              } else {
-                console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} returned no useful data, keeping SNMP result`);
               }
             }
-          } catch (e: any) {
-            console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll failed: ${e?.message}`);
-            // Keep the SNMP result — don't overwrite with simulate
-            if (poll.error) poll.error += `; ${proto.toUpperCase()} failed: ${e?.message}`;
+            sshResult.reachable = true;
+            poll = sshResult;
+          } else {
+            // Cache expired or no cache — run fresh SSH poll
+            console.warn(`[poller] ${sw.name}: running CLI poll (${proto.toUpperCase()} ${sw.sshUsername}@${sw.ipAddress}:${port}) — cache ${cacheAge === Infinity ? 'empty' : Math.round(cacheAge / 1000) + 's old'}`);
+            try {
+              const sshResult = await pollSwitchViaSsh(sw);
+              if (sshResult) {
+                const sshHasBetterData =
+                  sshResult.interfaces.length > 0 ||
+                  Object.keys(sshResult.domReadings || {}).length > 0 ||
+                  sshResult.neighbors.length > 0 ||
+                  !poll.reachable;
+                if (sshHasBetterData) {
+                  if (!sshResult.sysDescr && poll.sysDescr) sshResult.sysDescr = poll.sysDescr;
+                  if (!sshResult.sysName && poll.sysName) sshResult.sysName = poll.sysName;
+                  if (!sshResult.uptimeSeconds && poll.uptimeSeconds) sshResult.uptimeSeconds = poll.uptimeSeconds;
+                  if (sshResult.interfaces.length > 0 && poll.interfaces.length > 0) {
+                    const snmpByIfName = new Map<string, any>();
+                    for (const iface of poll.interfaces) {
+                      if (iface.ifName) snmpByIfName.set(iface.ifName.toLowerCase(), iface);
+                    }
+                    for (const sshIface of sshResult.interfaces) {
+                      const snmpIface = snmpByIfName.get((sshIface.ifName || "").toLowerCase());
+                      if (snmpIface) {
+                        if (sshIface.ifInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifInOctets = snmpIface.ifHCInOctets;
+                        if (sshIface.ifOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifOutOctets = snmpIface.ifHCOutOctets;
+                        if (sshIface.ifHCInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifHCInOctets = snmpIface.ifHCInOctets;
+                        if (sshIface.ifHCOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifHCOutOctets = snmpIface.ifHCOutOctets;
+                      }
+                    }
+                  }
+                  sshResult.reachable = true;
+                  sshResult.error = `Data via ${proto.toUpperCase()} CLI. ${sshResult.error ?? ""}`;
+                  poll = sshResult;
+                  // Cache the result
+                  SSH_CACHE.set(sw.id, { result: { ...sshResult }, ts: now });
+                  console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll succeeded — interfaces=${poll.interfaces.length} neighbors=${poll.neighbors.length} dom=${Object.keys(poll.domReadings).length} uptime=${poll.uptimeSeconds}s (cached for ${SSH_CACHE_TTL_MS / 1000}s)`);
+                } else {
+                  console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} returned no useful data, keeping SNMP result`);
+                }
+              }
+            } catch (e: any) {
+              console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll failed: ${e?.message}`);
+              if (poll.error) poll.error += `; ${proto.toUpperCase()} failed: ${e?.message}`;
+            }
           }
         }
         return { sw, poll };

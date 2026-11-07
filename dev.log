@@ -5,53 +5,11 @@ $ next dev -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 587ms
+✓ Ready in 615ms
 ○ Compiling / ...
- GET / 200 in 3.6s (compile: 3.3s, render: 316ms)
- GET /api/metrics 200 in 183ms (compile: 176ms, render: 8ms)
- GET /api/rings 200 in 195ms (compile: 68ms, render: 127ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 205ms (compile: 103ms, render: 102ms)
- GET /api/companies 200 in 209ms (compile: 125ms, render: 84ms)
- GET /api/switches 200 in 216ms (compile: 200ms, render: 16ms)
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[poller] Mum-Core-01: SSH/Telnet enabled — running CLI poll (SSH admin@10.10.1.11:22)
-[poller] Mum-Core-01: SSH/Telnet enabled — running CLI poll (SSH admin@10.10.1.11:22)
+ GET / 200 in 3.7s (compile: 3.4s, render: 301ms)
+ GET /api/metrics 200 in 139ms (compile: 125ms, render: 14ms)
+ GET /api/switches 200 in 175ms (compile: 164ms, render: 11ms)
+ GET /api/companies 200 in 26ms (compile: 20ms, render: 6ms)
+ GET /api/rings 200 in 26ms (compile: 19ms, render: 6ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 27ms (compile: 20ms, render: 7ms)
