@@ -1190,11 +1190,20 @@ function RingDiagram(props: {
             <marker id={`arrow-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.78 0.16 195)" />
             </marker>
+            <marker id={`arrow-rev-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.78 0.16 195)" opacity="0.7" />
+            </marker>
             <marker id={`arrow-warn-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.80 0.17 80)" />
             </marker>
+            <marker id={`arrow-warn-rev-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.80 0.17 80)" opacity="0.7" />
+            </marker>
             <marker id={`arrow-crit-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.65 0.22 25)" />
+            </marker>
+            <marker id={`arrow-crit-rev-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.65 0.22 25)" opacity="0.7" />
             </marker>
             <marker id={`arrow-close-${ring.id}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.78 0.16 195)" opacity="0.7" />
@@ -1208,20 +1217,32 @@ function RingDiagram(props: {
             const p2 = nodePos(toIdx, nodes.length);
             const color = link?.health === "critical" ? "oklch(0.65 0.22 25)" : link?.health === "warning" ? "oklch(0.80 0.17 80)" : "oklch(0.78 0.16 195)";
             const strokeWidth = link ? (link.utilization > 60 ? 3.5 : link.utilization > 20 ? 2.5 : 1.8) : 1.5;
-            // Arrow marker based on link health
             const markerId = link?.health === "critical" ? `arrow-crit-${ring.id}` : link?.health === "warning" ? `arrow-warn-${ring.id}` : `arrow-${ring.id}`;
-            // Offset the line endpoints so arrows don't overlap nodes
+            const markerIdRev = link?.health === "critical" ? `arrow-crit-rev-${ring.id}` : link?.health === "warning" ? `arrow-warn-rev-${ring.id}` : `arrow-rev-${ring.id}`;
+            // For bidirectional arrows: draw TWO parallel lines slightly offset
+            // so both directions are visible. The forward line shows In Mbps,
+            // the reverse line shows Out Mbps.
             const dx = p2.x - p1.x, dy = p2.y - p1.y;
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
             const offset = 30;
-            const sx = p1.x + (dx / dist) * offset;
-            const sy = p1.y + (dy / dist) * offset;
-            const ex = p2.x - (dx / dist) * offset;
-            const ey = p2.y - (dy / dist) * offset;
+            // Perpendicular offset for the two parallel lines
+            const perpX = -dy / dist * 8;  // 8px separation
+            const perpY = dx / dist * 8;
+            // Forward (from → to): slightly above center
+            const fSx = p1.x + (dx / dist) * offset + perpX;
+            const fSy = p1.y + (dy / dist) * offset + perpY;
+            const fEx = p2.x - (dx / dist) * offset + perpX;
+            const fEy = p2.y - (dy / dist) * offset + perpY;
+            // Reverse (to → from): slightly below center
+            const rSx = p2.x - (dx / dist) * offset - perpX;
+            const rSy = p2.y - (dy / dist) * offset - perpY;
+            const rEx = p1.x + (dx / dist) * offset - perpX;
+            const rEy = p1.y + (dy / dist) * offset - perpY;
             return (
               <g key={i}>
+                {/* Forward link (In Mbps) */}
                 <line
-                  x1={sx} y1={sy} x2={ex} y2={ey}
+                  x1={fSx} y1={fSy} x2={fEx} y2={fEy}
                   stroke={color}
                   strokeWidth={strokeWidth}
                   strokeOpacity={0.85}
@@ -1232,18 +1253,47 @@ function RingDiagram(props: {
                   onMouseMove={(e) => link && onLinkHover(link, e)}
                   onMouseLeave={() => onLinkHover(null, null)}
                 />
+                {/* Reverse link (Out Mbps) */}
+                <line
+                  x1={rSx} y1={rSy} x2={rEx} y2={rEy}
+                  stroke={color}
+                  strokeWidth={strokeWidth}
+                  strokeOpacity={0.6}
+                  strokeLinecap="round"
+                  markerEnd={`url(#${markerIdRev})`}
+                  className="cursor-pointer transition-all"
+                  onMouseEnter={(e) => link && onLinkHover(link, e)}
+                  onMouseMove={(e) => link && onLinkHover(link, e)}
+                  onMouseLeave={() => onLinkHover(null, null)}
+                />
                 {link && (
-                  <text
-                    x={(p1.x + p2.x) / 2}
-                    y={(p1.y + p2.y) / 2 - 6}
-                    textAnchor="middle"
-                    className="pointer-events-none"
-                    fill={color}
-                    fontSize="11"
-                    fontWeight="600"
-                  >
-                    {fmtMbpsShort(link.inMbps)}
-                  </text>
+                  <>
+                    {/* In Mbps label (forward) */}
+                    <text
+                      x={(p1.x + p2.x) / 2 + perpX * 1.5}
+                      y={(p1.y + p2.y) / 2 - 4 + perpY * 1.5}
+                      textAnchor="middle"
+                      className="pointer-events-none"
+                      fill={color}
+                      fontSize="10"
+                      fontWeight="600"
+                    >
+                      ↓ {fmtMbpsShort(link.inMbps)}
+                    </text>
+                    {/* Out Mbps label (reverse) */}
+                    <text
+                      x={(p1.x + p2.x) / 2 - perpX * 1.5}
+                      y={(p1.y + p2.y) / 2 + 10 - perpY * 1.5}
+                      textAnchor="middle"
+                      className="pointer-events-none"
+                      fill={color}
+                      fontSize="10"
+                      fontWeight="600"
+                      opacity={0.8}
+                    >
+                      ↑ {fmtMbpsShort(link.outMbps)}
+                    </text>
+                  </>
                 )}
               </g>
             );
