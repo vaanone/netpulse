@@ -76,48 +76,75 @@ export async function runPollCycle(): Promise<Snapshot> {
     const results = await Promise.allSettled(switches.map(async (sw) => {
       try {
         let poll = await pollSwitch(sw);
-        // ─── SSH fallback ───
-        // If SNMP returned none of the SUBSTANTIVE data (interfaces, CPU, memory, neighbors),
-        // AND the switch has CLI fallback enabled with credentials, try SSH/Telnet.
-        // NOTE: We intentionally exclude sysDescr/sysName/uptime from this check — those are
-        // scalar OIDs fetched via single GET, and they often work on SMB switches even when
-        // GETBULK/GETNEXT on tables (ifTable, cdpCacheTable, cpmCPUTable, etc.) does not.
-        // Without this exclusion, we'd never fall back to CLI because sysDescr always succeeds.
-        const snmpHasSubstantiveData =
-          poll.reachable && (
-            poll.cpuUsage != null || poll.memoryUsed != null ||
-            poll.interfaces.length > 0 || poll.neighbors.length > 0
-          );
-        if (!snmpHasSubstantiveData && sw.sshEnabled && sw.sshUsername && sw.sshPassword) {
+        // ─── SSH/Telnet CLI fallback ───
+        // If the switch has CLI fallback enabled with credentials, ALWAYS try SSH/Telnet
+        // and MERGE the results. SNMP on Catalyst SMB switches may return interfaces
+        // but NOT SFP DOM readings, proper CDP neighbor names (SysName), or port
+        // descriptions. SSH gives us all of these.
+        //
+        // Strategy: run SSH if enabled, then merge — prefer SSH data for:
+        //   - interfaces (port status with UP/DOWN)
+        //   - domReadings (SFP Tx/Rx power, temperature, voltage)
+        //   - transceivers (part numbers, serials)
+        //   - neighbors (CDP with SysName and IP address)
+        //   - sysDescr (if SSH provided one)
+        //   - uptimeSeconds (if SSH provided one)
+        // Prefer SNMP data for:
+        //   - counters (ifHCInOctets, ifHCOutOctets) — SNMP is better for traffic data
+        if (sw.sshEnabled && sw.sshUsername && sw.sshPassword) {
           const proto = (sw as any).cliProtocol === "telnet" ? "telnet" : "ssh";
           const port = sw.sshPort ?? (proto === "telnet" ? 23 : 22);
-          console.warn(`[poller] ${sw.name}: SNMP returned no substantive data (interfaces=${poll.interfaces.length}, cpu=${poll.cpuUsage}, mem=${poll.memoryUsed}), falling back to ${proto.toUpperCase()} (${sw.sshUsername}@${sw.ipAddress}:${port})`);
+          console.warn(`[poller] ${sw.name}: SSH/Telnet enabled — running CLI poll (${proto.toUpperCase()} ${sw.sshUsername}@${sw.ipAddress}:${port})`);
           try {
             const sshResult = await pollSwitchViaSsh(sw);
-            if (sshResult && (sshResult.cpuUsage != null || sshResult.memoryUsed != null || sshResult.interfaces.length > 0 || sshResult.neighbors.length > 0)) {
-              // Preserve SNMP sysDescr/sysName/uptime since CLI equivalents might be less accurate
-              if (!sshResult.sysDescr && poll.sysDescr) sshResult.sysDescr = poll.sysDescr;
-              if (!sshResult.sysName && poll.sysName) sshResult.sysName = poll.sysName;
-              if (!sshResult.uptimeSeconds && poll.uptimeSeconds) sshResult.uptimeSeconds = poll.uptimeSeconds;
-              // Mark as reachable so persistence code runs and writes to DB
-              sshResult.reachable = true;
-              sshResult.error = `SNMP partial — substantive data via ${proto.toUpperCase()}. ${sshResult.error ?? ""}`;
-              poll = sshResult;
-              console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} fallback succeeded — interfaces=${poll.interfaces.length} cpu=${poll.cpuUsage} neighbors=${poll.neighbors.length}`);
-            } else {
-              console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} fallback returned no substantive data`);
-              if (sshResult) {
-                // Preserve sysDescr/sysName from SNMP even if SSH failed
-                sshResult.sysDescr = sshResult.sysDescr ?? poll.sysDescr;
-                sshResult.sysName = sshResult.sysName ?? poll.sysName;
-                sshResult.uptimeSeconds = sshResult.uptimeSeconds ?? poll.uptimeSeconds;
+            if (sshResult) {
+              // If SSH returned MORE data than SNMP (or SNMP failed entirely), use SSH
+              const sshHasBetterData =
+                sshResult.interfaces.length > 0 ||
+                Object.keys(sshResult.domReadings || {}).length > 0 ||
+                sshResult.neighbors.length > 0 ||
+                !poll.reachable;
+
+              if (sshHasBetterData) {
+                // Merge: preserve SNMP sysDescr/sysName/uptime if SSH didn't get them
+                if (!sshResult.sysDescr && poll.sysDescr) sshResult.sysDescr = poll.sysDescr;
+                if (!sshResult.sysName && poll.sysName) sshResult.sysName = poll.sysName;
+                if (!sshResult.uptimeSeconds && poll.uptimeSeconds) sshResult.uptimeSeconds = poll.uptimeSeconds;
+
+                // If SNMP returned interfaces with counters but SSH returned interfaces
+                // without counters, try to merge counters from SNMP into SSH interfaces
+                if (sshResult.interfaces.length > 0 && poll.interfaces.length > 0) {
+                  const snmpByIfName = new Map<string, any>();
+                  for (const iface of poll.interfaces) {
+                    if (iface.ifName) snmpByIfName.set(iface.ifName.toLowerCase(), iface);
+                  }
+                  for (const sshIface of sshResult.interfaces) {
+                    const snmpIface = snmpByIfName.get((sshIface.ifName || "").toLowerCase());
+                    if (snmpIface) {
+                      // Copy traffic counters from SNMP if SSH doesn't have them
+                      if (sshIface.ifInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifInOctets = snmpIface.ifHCInOctets;
+                      if (sshIface.ifOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifOutOctets = snmpIface.ifHCOutOctets;
+                      if (sshIface.ifHCInOctets == null && snmpIface.ifHCInOctets != null) sshIface.ifHCInOctets = snmpIface.ifHCInOctets;
+                      if (sshIface.ifHCOutOctets == null && snmpIface.ifHCOutOctets != null) sshIface.ifHCOutOctets = snmpIface.ifHCOutOctets;
+                      if (sshIface.ifInErrors == null && snmpIface.ifInErrors != null) sshIface.ifInErrors = snmpIface.ifInErrors;
+                      if (sshIface.ifOutErrors == null && snmpIface.ifOutErrors != null) sshIface.ifOutErrors = snmpIface.ifOutErrors;
+                    }
+                  }
+                }
+
+                // Mark as reachable so persistence code runs and writes to DB
+                sshResult.reachable = true;
+                sshResult.error = `Data via ${proto.toUpperCase()} CLI. ${sshResult.error ?? ""}`;
                 poll = sshResult;
+                console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll succeeded — interfaces=${poll.interfaces.length} neighbors=${poll.neighbors.length} dom=${Object.keys(poll.domReadings).length} uptime=${poll.uptimeSeconds}s`);
+              } else {
+                console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} returned no useful data, keeping SNMP result`);
               }
             }
           } catch (e: any) {
-            console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} fallback failed: ${e?.message}`);
-            // Keep the SNMP partial result — don't overwrite with simulate
-            poll.error = `SNMP partial, ${proto.toUpperCase()} failed: ${e?.message ?? "unknown"}`;
+            console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll failed: ${e?.message}`);
+            // Keep the SNMP result — don't overwrite with simulate
+            if (poll.error) poll.error += `; ${proto.toUpperCase()} failed: ${e?.message}`;
           }
         }
         return { sw, poll };
