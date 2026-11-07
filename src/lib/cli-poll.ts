@@ -557,8 +557,36 @@ async function runCliCommand(config: CliConfig, command: string): Promise<string
 function parseShowVersion(output: string): Partial<PollResult> {
   const out: Partial<PollResult> = {};
   const lines = output.split("\n");
+
+  // Detect Cisco SMB firmware format:
+  //   Active-image: flash://system/images/image_4.1.3.36.bin
+  //     Version: 4.1.3.36
+  //     Date: 19-May-2024
+  //   Inactive-image: ...
+  const isSmb = output.includes("Active-image:") || output.includes("Inactive-image:");
+  if (isSmb) {
+    // Extract version from "Version: X.X.X" line (first occurrence)
+    const versionMatch = output.match(/Version:\s*([\d.]+)/i);
+    const version = versionMatch ? versionMatch[1] : null;
+    // Extract date
+    const dateMatch = output.match(/Date:\s*(\S+)/i);
+    const date = dateMatch ? dateMatch[1] : null;
+    // Extract active image path
+    const imageMatch = output.match(/Active-image:\s*(\S+)/i);
+    const image = imageMatch ? imageMatch[1] : null;
+    // Build sysDescr
+    const parts: string[] = ["Cisco SMB Switch"];
+    if (version) parts.push(`Version ${version}`);
+    if (date) parts.push(`Date ${date}`);
+    if (image) parts.push(`Active-image ${image}`);
+    out.sysDescr = parts.join(", ");
+    // SMB show version doesn't include uptime — that comes from "show system"
+    return out;
+  }
+
+  // Standard IOS format:
+  // "Cisco IOS Software, C1300 Software (C1300-UNIVERSALK9-M), Version 15.2(7)E3..."
   for (const line of lines) {
-    // "Cisco IOS Software, C1300 Software (C1300-UNIVERSALK9-M), Version 15.2(7)E3..."
     if (line.includes("Cisco IOS Software") && !out.sysDescr) {
       out.sysDescr = line.trim();
     }
@@ -577,7 +605,6 @@ function parseShowVersion(output: string): Partial<PollResult> {
       if (secMatch) seconds += parseInt(secMatch[1]);
       out.uptimeSeconds = seconds;
     }
-    // "System image file is \"flash:/...\""
     // "cisco C1300-24P-4X (ARM) processor"
     if (line.match(/cisco\s+\S+\s+\(.*processor/i) && !out.sysDescr) {
       out.sysDescr = line.trim();
@@ -1279,6 +1306,7 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     "show power inline",                        // PoE
     "show environment power",                   // PSU status
     "show inventory",                           // transceiver part numbers
+    "show system",                             // Cisco SMB — uptime + system info
     "show cdp neighbors detail",                // CDP with IP addresses (lower priority)
     "show memory",                              // memory fallback
   ];
@@ -1362,9 +1390,9 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     result.neighbors.push(...cdp);
     if (cdp.length > 0) commandsRun++;
   }
-  // Also try detail version (index 11) — has IP addresses we can use
-  if (outputs[11] && !outputs[11].includes("% Unrecognized")) {
-    const cdpDetail = parseShowCdpNeighbors(outputs[11], true);
+  // Also try detail version (index 12) — has IP addresses we can use
+  if (outputs[12] && !outputs[12].includes("% Unrecognized")) {
+    const cdpDetail = parseShowCdpNeighbors(outputs[12], true);
     // Merge: if detail has IPs we didn't get from basic, update existing neighbors
     for (const detailNeighbor of cdpDetail) {
       const existing = result.neighbors.find(n =>
@@ -1418,8 +1446,8 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     if (cpu != null) { result.cpuUsage = cpu; commandsRun++; }
   }
 
-  // 5: show memory statistics (or 12: show memory fallback)
-  const memOut = outputs[5] || outputs[12];
+  // 5: show memory statistics (or 13: show memory fallback)
+  const memOut = outputs[5] || outputs[13];
   if (memOut) {
     const mem = parseShowMemory(memOut);
     if (mem) {
@@ -1477,6 +1505,53 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
       }
       console.warn(`[cli] ${row.name}: parsed ${inventory.size} inventory entries`);
     }
+  }
+
+  // 11: show system — Cisco SMB uptime + system info
+  if (outputs[11] && !outputs[11].includes("% Unrecognized") && !result.uptimeSeconds) {
+    const sysOut = outputs[11];
+    // Try format: "System Up Time (days,hours:minutes:seconds):  1,02:30:15"
+    const upDaysHms = sysOut.match(/System Up Time[^:]*:\s*(\d+),(\d+):(\d+):(\d+)/i);
+    if (upDaysHms) {
+      const days = parseInt(upDaysHms[1]);
+      const hours = parseInt(upDaysHms[2]);
+      const mins = parseInt(upDaysHms[3]);
+      const secs = parseInt(upDaysHms[4]);
+      result.uptimeSeconds = days * 86400 + hours * 3600 + mins * 60 + secs;
+    } else {
+      // Try format: "System Up Time: 1 day, 2 hours, 30 minutes"
+      const upText = sysOut.match(/System Up Time:\s*(.+?)$/im);
+      if (upText) {
+        const str = upText[1].toLowerCase();
+        let seconds = 0;
+        const d = str.match(/(\d+)\s*day/);
+        const h = str.match(/(\d+)\s*hour/);
+        const m = str.match(/(\d+)\s*minute/);
+        const s = str.match(/(\d+)\s*second/);
+        if (d) seconds += parseInt(d[1]) * 86400;
+        if (h) seconds += parseInt(h[1]) * 3600;
+        if (m) seconds += parseInt(m[1]) * 60;
+        if (s) seconds += parseInt(s[1]);
+        if (seconds > 0) result.uptimeSeconds = seconds;
+      }
+    }
+    // Also try "Up Time" (without "System")
+    if (!result.uptimeSeconds) {
+      const upTime = sysOut.match(/Up Time[^:]*:\s*(\d+):(\d+):(\d+)/i);
+      if (upTime) {
+        result.uptimeSeconds = parseInt(upTime[1]) * 3600 + parseInt(upTime[2]) * 60 + parseInt(upTime[3]);
+      }
+    }
+  }
+
+  // Log what we actually got from each command
+  console.warn(`[cli] ${row.name}: command outputs summary:`);
+  for (let i = 0; i < outputs.length; i++) {
+    const out = outputs[i] || "";
+    const cmdName = commands[i] || `cmd${i}`;
+    const bytes = out.length;
+    const preview = out.slice(0, 80).replace(/\n/g, "\\n");
+    console.warn(`  [${i}] ${cmdName}: ${bytes} bytes ${bytes > 0 ? `"${preview}..."` : "(empty)"}`);
   }
 
   // If we got no useful data at all, mark as unreachable
