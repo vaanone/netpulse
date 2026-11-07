@@ -2586,6 +2586,7 @@ function SwitchFormDialog(props: {
   const [detectedNeighbors, setDetectedNeighbors] = React.useState<Array<{
     deviceId: string; devicePort: string; address: string | null;
     protocol: string; matchedSwitchId: string | null; matchedSwitchName: string | null;
+    matchedBy?: string | null;
   }>>([]);
 
   const handleDetect = async () => {
@@ -3044,8 +3045,15 @@ function SwitchFormDialog(props: {
             {detectedNeighbors.length > 0 ? (
               <div className="rounded-md border border-primary/30 bg-primary/5 p-2 space-y-1">
                 <div className="text-[10px] text-primary font-medium flex items-center gap-1">
-                  <Crosshair className="size-3" /> Detected {detectedNeighbors.filter(n => n.matchedSwitchId).length} nearby switch(es):
+                  <Crosshair className="size-3" />
+                  Found {detectedNeighbors.length} neighbor(s)
+                  {detectedNeighbors.filter(n => n.matchedSwitchId).length > 0 && (
+                    <span className="text-emerald-600 ml-1">
+                      — {detectedNeighbors.filter(n => n.matchedSwitchId).length} matched
+                    </span>
+                  )}
                 </div>
+                {/* Matched neighbors — clickable to set as next */}
                 {detectedNeighbors.filter(n => n.matchedSwitchId).map(n => (
                   <button
                     key={n.matchedSwitchId}
@@ -3062,15 +3070,27 @@ function SwitchFormDialog(props: {
                     {nextSwitchId === n.matchedSwitchId && <span className="text-[10px] text-primary ml-auto">← selected as next</span>}
                   </button>
                 ))}
-                {detectedNeighbors.filter(n => n.matchedSwitchId).length === 0 && (
-                  <div className="text-[10px] text-muted-foreground">
-                    No matching switches found. Add the neighboring switch to NETPULSE first, then re-detect.
+                {/* Unmatched neighbors — show as info with hint */}
+                {detectedNeighbors.filter(n => !n.matchedSwitchId).map(n => (
+                  <div key={`unmatched-${n.deviceId}-${n.devicePort}`} className="text-[10px] p-1 rounded bg-amber-500/10 border border-amber-500/30">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-amber-700">{n.deviceId}</span>
+                      <span className="text-muted-foreground">
+                        on port <span className="font-mono">{n.devicePort}</span>
+                      </span>
+                      {n.address && (
+                        <span className="text-muted-foreground font-mono">IP: {n.address}</span>
+                      )}
+                      <span className="text-muted-foreground">via {n.protocol.toUpperCase()}</span>
+                    </div>
+                    <div className="text-amber-700 mt-0.5">
+                      → To match: add a switch to NETPULSE with this hostname or IP
+                    </div>
                   </div>
-                )}
-                {detectedNeighbors.filter(n => !n.matchedSwitchId).length > 0 && (
+                ))}
+                {detectedNeighbors.filter(n => n.matchedSwitchId).length === 0 && (
                   <div className="text-[10px] text-muted-foreground pt-1 border-t border-border/30">
-                    <span className="text-muted-foreground">Unmatched neighbors: </span>
-                    {detectedNeighbors.filter(n => !n.matchedSwitchId).map(n => n.deviceId).join(", ")}
+                    💡 No matches yet. Add the neighbor(s) above to NETPULSE, then click Auto-Detect again.
                   </div>
                 )}
               </div>

@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
     const neighbors = (poll.neighbors || []).map((n) => {
       let matchedSwitchId: string | null = null;
       let matchedSwitchName: string | null = null;
+      let matchedBy: string | null = null;
 
       // 1. Match by IP address (most reliable)
       if (n.address) {
@@ -94,6 +95,7 @@ export async function POST(req: NextRequest) {
         if (byIp) {
           matchedSwitchId = byIp.id;
           matchedSwitchName = byIp.name;
+          matchedBy = "ip";
         }
       }
       // 2. Match by hostname (exact, case-insensitive)
@@ -102,6 +104,7 @@ export async function POST(req: NextRequest) {
         if (byName) {
           matchedSwitchId = byName.id;
           matchedSwitchName = byName.name;
+          matchedBy = "name-exact";
         }
       }
       // 3. Fuzzy match by hostname suffix (handles FQDNs like "switch2.example.com" → "switch2")
@@ -114,6 +117,7 @@ export async function POST(req: NextRequest) {
         if (bySuffix) {
           matchedSwitchId = bySuffix.id;
           matchedSwitchName = bySuffix.name;
+          matchedBy = "name-suffix";
         }
       }
       // 4. Fuzzy match: switch name appears anywhere in deviceId
@@ -125,6 +129,18 @@ export async function POST(req: NextRequest) {
         if (byContains) {
           matchedSwitchId = byContains.id;
           matchedSwitchName = byContains.name;
+          matchedBy = "name-substring";
+        }
+      }
+      // 5. Match by switch IP appearing in deviceId (some switches report "switch-192.168.10.201")
+      if (!matchedSwitchId && n.deviceId) {
+        const byIpInDeviceId = existingSwitches.find(s =>
+          s.ipAddress && n.deviceId!.includes(s.ipAddress)
+        );
+        if (byIpInDeviceId) {
+          matchedSwitchId = byIpInDeviceId.id;
+          matchedSwitchName = byIpInDeviceId.name;
+          matchedBy = "ip-in-deviceid";
         }
       }
 
@@ -135,6 +151,7 @@ export async function POST(req: NextRequest) {
         protocol: n.protocol,
         matchedSwitchId,
         matchedSwitchName,
+        matchedBy,
       };
     });
 
