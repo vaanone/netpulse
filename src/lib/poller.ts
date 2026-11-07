@@ -112,9 +112,26 @@ export async function runPollCycle(): Promise<Snapshot> {
               for (const iface of poll.interfaces) {
                 if (iface.ifName) snmpByIfName.set(iface.ifName.toLowerCase(), iface);
               }
+              // Also try matching by normalized name (strip "gigabitethernet" → "gi", "tengigabitethernet" → "te")
+              const normalizeIfName = (name: string): string => {
+                const lower = name.toLowerCase();
+                if (lower.startsWith("gigabitethernet")) return "gi" + lower.substring(16);
+                if (lower.startsWith("tengigabitethernet")) return "te" + lower.substring(18);
+                return lower;
+              };
+              // Build normalized name map too
+              const snmpByNormName = new Map<string, any>();
+              for (const iface of poll.interfaces) {
+                if (iface.ifName) snmpByNormName.set(normalizeIfName(iface.ifName), iface);
+              }
+              let mergeCount = 0;
               for (const sshIface of sshResult.interfaces) {
-                const snmpIface = snmpByIfName.get((sshIface.ifName || "").toLowerCase());
+                const sshName = (sshIface.ifName || "").toLowerCase();
+                const sshNormName = normalizeIfName(sshName);
+                // Try exact match first, then normalized match
+                const snmpIface = snmpByIfName.get(sshName) ?? snmpByNormName.get(sshNormName);
                 if (snmpIface) {
+                  mergeCount++;
                   // Always overwrite with fresh SNMP counters
                   if (snmpIface.ifHCInOctets != null) {
                     sshIface.ifInOctets = snmpIface.ifHCInOctets;
@@ -128,6 +145,12 @@ export async function runPollCycle(): Promise<Snapshot> {
                   if (snmpIface.ifInErrors != null) sshIface.ifInErrors = snmpIface.ifInErrors;
                   if (snmpIface.ifOutErrors != null) sshIface.ifOutErrors = snmpIface.ifOutErrors;
                 }
+              }
+              if (mergeCount === 0 && poll.interfaces.length > 0) {
+                // Log a warning if we couldn't merge any SNMP counters
+                console.warn(`[poller] ${sw.name}: 0 SNMP counters merged! SNMP names: ${poll.interfaces.slice(0, 5).map(i => i.ifName).join(", ")} | SSH names: ${sshResult.interfaces.slice(0, 5).map(i => i.ifName).join(", ")}`);
+              } else if (mergeCount < sshResult.interfaces.length) {
+                console.warn(`[poller] ${sw.name}: merged ${mergeCount}/${sshResult.interfaces.length} SNMP counters`);
               }
             }
             sshResult.reachable = true;
