@@ -1264,24 +1264,23 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
 
   // Run all commands in ONE persistent SSH/telnet session (much faster than
   // opening a new connection per command, which causes handshake timeouts).
-  // Commands ordered with primary first, fallbacks after.
-  // Note: We include both IOS and SMB commands because we don't know which
-  // firmware the switch has until we try. Failed commands return
-  // "% Unrecognized" which we filter out during parsing.
+  // IMPORTANT: Order commands by priority — most important first.
+  // If the switch drops the SSH connection after ~10 commands (common on
+  // Catalyst SMB due to session limits), we still get the critical data.
   const commands = [
     "show version",
-    "show processes cpu",
-    "show memory statistics",
-    "show memory",                              // fallback if "statistics" not supported
-    "show ports details",                       // Cisco SMB (Catalyst 1000/1300/1400) — port status
-    "show ports description",                   // Cisco SMB — port descriptions
-    "show cdp neighbors detail",
-    "show cdp neighbors",                       // fallback if "detail" not supported
-    "show lldp neighbors",
-    "show power inline",
-    "show environment power",
-    "show interfaces transceiver",              // IOS-XE — SFP DOM readings
-    "show inventory",                           // transceiver part numbers / serials
+    "show ports details",                       // port status (Cisco SMB) — HIGH PRIORITY
+    "show cdp neighbors",                       // CDP neighbors — HIGH PRIORITY (skip detail, faster)
+    "show interfaces transceiver",              // SFP DOM — HIGH PRIORITY
+    "show processes cpu",                       // CPU
+    "show memory statistics",                  // memory
+    "show ports description",                   // port descriptions
+    "show lldp neighbors",                      // LLDP neighbors
+    "show power inline",                        // PoE
+    "show environment power",                   // PSU status
+    "show inventory",                           // transceiver part numbers
+    "show cdp neighbors detail",                // CDP with IP addresses (lower priority)
+    "show memory",                              // memory fallback
   ];
 
   let outputs: string[];
@@ -1304,6 +1303,20 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   }
 
   // Parse each command's output
+  // New command order (priority first):
+  //   0: show version
+  //   1: show ports details           — port status (HIGH PRIORITY)
+  //   2: show cdp neighbors           — CDP neighbors (HIGH PRIORITY)
+  //   3: show interfaces transceiver  — SFP DOM (HIGH PRIORITY)
+  //   4: show processes cpu
+  //   5: show memory statistics
+  //   6: show ports description
+  //   7: show lldp neighbors
+  //   8: show power inline
+  //   9: show environment power
+  //  10: show inventory
+  //  11: show cdp neighbors detail     (fallback for IP addresses)
+  //  12: show memory                   (fallback)
   let commandsRun = 0;
   let sshError: string | null = null;
 
@@ -1315,51 +1328,23 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     else sshError = "show version: didn't parse";
   } else sshError = "show version: empty output";
 
-  // 1: show processes cpu
-  if (outputs[1]) {
-    const cpu = parseShowCpu(outputs[1]);
-    if (cpu != null) { result.cpuUsage = cpu; commandsRun++; }
-  }
-
-  // 2: show memory statistics (or 3: show memory fallback)
-  const memOut = outputs[2] || outputs[3];
-  if (memOut) {
-    const mem = parseShowMemory(memOut);
-    if (mem) {
-      result.memoryUsed = mem.used;
-      result.memoryFree = mem.free;
-      commandsRun++;
-    }
-  }
-
-  // 4: show ports details (Cisco SMB), 5: show ports description (Cisco SMB)
+  // 1: show ports details (Cisco SMB) — port status (HIGH PRIORITY)
+  // 6: show ports description (Cisco SMB) — port descriptions
   let ports: any[] = [];
-  // Cisco SMB: "show ports details" (output 4) — has Port, Type, Duplex, Speed, State
-  if (outputs[4] && !outputs[4].includes("% Unrecognized")) {
-    ports = parseShowPortsDetails(outputs[4]);
+  if (outputs[1] && !outputs[1].includes("% Unrecognized")) {
+    ports = parseShowPortsDetails(outputs[1]);
   }
-  // Cisco SMB: "show ports description" (output 5) — has Port + Description
-  if (ports.length === 0 && outputs[5] && !outputs[5].includes("% Unrecognized")) {
-    ports = parseShowPortsDescription(outputs[5]);
+  if (ports.length === 0 && outputs[6] && !outputs[6].includes("% Unrecognized")) {
+    ports = parseShowPortsDescription(outputs[6]);
   }
-  // Merge: if we got ports from status but no descriptions, try the description commands
-  if (ports.length > 0) {
-    let descMap = new Map<string, string>();
-    if (outputs[5] && !outputs[5].includes("% Unrecognized")) {
-      // SMB description: "show ports description"
-      // Format: gi1       <description>
-      for (const line of outputs[5].split("\n")) {
-        const m = line.match(/^(\S+)\s+(.+)$/);
-        if (m && m[1].match(/^(gi|te|tw|fa|hu|fo|po|ch)/i)) {
-          descMap.set(m[1].toLowerCase(), m[2].trim());
-        }
-      }
-    }
-    // Apply descriptions to ports
-    for (const p of ports) {
-      const ifNameLower = (p.ifName || "").toLowerCase();
-      if (descMap.has(ifNameLower) && !p.ifAlias) {
-        p.ifAlias = descMap.get(ifNameLower);
+  // Merge: if we got ports from status, also extract descriptions from output[6]
+  if (ports.length > 0 && outputs[6] && !outputs[6].includes("% Unrecognized")) {
+    for (const line of outputs[6].split("\n")) {
+      const m = line.match(/^(\S+)\s+(.+)$/);
+      if (m && m[1].match(/^(gi|te|tw|fa|hu|fo|po|ch)/i)) {
+        const ifNameLower = m[1].toLowerCase();
+        const port = ports.find(p => p.ifName.toLowerCase() === ifNameLower);
+        if (port && !port.ifAlias) port.ifAlias = m[2].trim();
       }
     }
   }
@@ -1370,56 +1355,42 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   }
   if (ports.length > 0) commandsRun++;
 
-  // 6: show cdp neighbors detail, 7: show cdp neighbors fallback
-  const cdpOut = outputs[6] || outputs[7];
-  if (cdpOut) {
-    let cdp = parseShowCdpNeighbors(outputs[6] || "", true);
-    if (cdp.length === 0 && outputs[7]) {
-      cdp = parseShowCdpNeighbors(outputs[7], false);
-    }
+  // 2: show cdp neighbors (HIGH PRIORITY — comes before detail)
+  // 11: show cdp neighbors detail (fallback for IP addresses)
+  if (outputs[2] && !outputs[2].includes("% Unrecognized")) {
+    const cdp = parseShowCdpNeighbors(outputs[2], false);
     result.neighbors.push(...cdp);
     if (cdp.length > 0) commandsRun++;
   }
-
-  // 8: show lldp neighbors
-  if (outputs[8]) {
-    const lldp = parseShowLldpNeighbors(outputs[8]);
-    result.neighbors.push(...lldp);
-  }
-
-  // 9: show power inline
-  if (outputs[9]) {
-    const { totalPoeWatts } = parseShowPowerInline(outputs[9]);
-    if (totalPoeWatts != null) {
-      if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
-      else { result.power.totalPoeWatts = totalPoeWatts; result.power.totalPoeMilliWatts = totalPoeWatts * 1000; }
-    }
-  }
-
-  // 10: show environment power
-  if (outputs[10]) {
-    const psus = parseShowEnvironmentPower(outputs[10]);
-    if (psus.length > 0) {
-      if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
-      else result.power.powerSupplies = psus;
-    }
-  }
-
-  // 11: show interfaces transceiver — SFP DOM readings (Tx/Rx power, temp, voltage, bias)
-  // Returns DOM readings keyed by temp ifIndex (1001+). We need to remap to real ifIndex
-  // by matching the ifName from the transceiver list to the interfaces we already parsed.
+  // Also try detail version (index 11) — has IP addresses we can use
   if (outputs[11] && !outputs[11].includes("% Unrecognized")) {
-    const { domReadings: tempDom, transceivers: tempTransceivers, ifIndexByIfName } = parseShowInterfacesTransceiver(outputs[11]);
+    const cdpDetail = parseShowCdpNeighbors(outputs[11], true);
+    // Merge: if detail has IPs we didn't get from basic, update existing neighbors
+    for (const detailNeighbor of cdpDetail) {
+      const existing = result.neighbors.find(n =>
+        n.deviceId === detailNeighbor.deviceId && n.devicePort === detailNeighbor.devicePort
+      );
+      if (existing) {
+        if (!existing.address && detailNeighbor.address) existing.address = detailNeighbor.address;
+        if (!existing.platform && detailNeighbor.platform) existing.platform = detailNeighbor.platform;
+      } else {
+        // New neighbor from detail that wasn't in basic
+        result.neighbors.push(detailNeighbor);
+      }
+    }
+  }
+
+  // 3: show interfaces transceiver — SFP DOM readings (HIGH PRIORITY)
+  if (outputs[3] && !outputs[3].includes("% Unrecognized")) {
+    const { domReadings: tempDom, transceivers: tempTransceivers, ifIndexByIfName } = parseShowInterfacesTransceiver(outputs[3]);
     if (Object.keys(tempDom).length > 0) {
       // Build a map from temp ifIndex → real ifIndex by matching ifName
       const tempToReal = new Map<number, number>();
       for (const [ifNameLower, tempIdx] of ifIndexByIfName.entries()) {
-        // Find the interface in result.interfaces with matching ifName (case-insensitive)
         const iface = result.interfaces.find((i: any) => i.ifName && i.ifName.toLowerCase() === ifNameLower);
         if (iface) {
           tempToReal.set(tempIdx, iface.ifIndex);
         } else {
-          // No matching interface — keep temp index (port is probably down or transceiver-only)
           tempToReal.set(tempIdx, tempIdx);
         }
       }
@@ -1441,9 +1412,50 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     }
   }
 
-  // 12: show inventory — transceiver part numbers and serials
-  if (outputs[12] && !outputs[12].includes("% Unrecognized")) {
-    const inventory = parseShowInventory(outputs[12]);
+  // 4: show processes cpu
+  if (outputs[4]) {
+    const cpu = parseShowCpu(outputs[4]);
+    if (cpu != null) { result.cpuUsage = cpu; commandsRun++; }
+  }
+
+  // 5: show memory statistics (or 12: show memory fallback)
+  const memOut = outputs[5] || outputs[12];
+  if (memOut) {
+    const mem = parseShowMemory(memOut);
+    if (mem) {
+      result.memoryUsed = mem.used;
+      result.memoryFree = mem.free;
+      commandsRun++;
+    }
+  }
+
+  // 7: show lldp neighbors
+  if (outputs[7] && !outputs[7].includes("% Unrecognized")) {
+    const lldp = parseShowLldpNeighbors(outputs[7]);
+    result.neighbors.push(...lldp);
+  }
+
+  // 8: show power inline
+  if (outputs[8] && !outputs[8].includes("% Unrecognized")) {
+    const { totalPoeWatts } = parseShowPowerInline(outputs[8]);
+    if (totalPoeWatts != null) {
+      if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
+      else { result.power.totalPoeWatts = totalPoeWatts; result.power.totalPoeMilliWatts = totalPoeWatts * 1000; }
+    }
+  }
+
+  // 9: show environment power
+  if (outputs[9] && !outputs[9].includes("% Unrecognized")) {
+    const psus = parseShowEnvironmentPower(outputs[9]);
+    if (psus.length > 0) {
+      if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
+      else result.power.powerSupplies = psus;
+    }
+  }
+
+  // 10: show inventory — transceiver part numbers and serials
+  if (outputs[10] && !outputs[10].includes("% Unrecognized")) {
+    const inventory = parseShowInventory(outputs[10]);
     if (inventory.size > 0) {
       // Enrich the transceivers we already parsed with part numbers / serials
       for (const t of result.transceivers) {
