@@ -161,21 +161,57 @@ function runSshCommand(config: CliConfig, command: string): Promise<string> {
 async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const conn = new Client();
-    // Allow up to 90 seconds for the whole batch (idle timeout on switches is
-    // typically 60s, but as long as we keep sending commands the session stays
-    // active). 13 commands × ~3s each = ~40s, plus handshake + login ~10s.
-    const timeoutMs = 90000;
+    // Overall batch timeout — allow 180 seconds for all commands.
+    // The switch has 60s idle timeout per SSH session, but as long as we keep
+    // sending commands, the session stays alive. Each command can take 5-15s
+    // on Catalyst SMB switches, so 7 commands × ~15s = 105s + handshake ~10s.
+    const timeoutMs = 180000;
+    // Per-command timeout — if a single command takes more than 25s, skip it
+    // and move to the next one. This prevents one slow/hanging command from
+    // blocking the entire batch.
+    const perCmdTimeoutMs = 25000;
     const results: string[] = new Array(commands.length).fill("");
     let currentCmdIdx = 0;
     let collectedOutput = "";
     let cmdSentForCurrent = false;
     let promptReady = false;
     let shellStream: any = null;
+    let perCmdTimer: NodeJS.Timeout | null = null;
 
     const overallTimer = setTimeout(() => {
       try { conn.end(); } catch {}
       reject(new Error(`SSH batch timed out after ${timeoutMs}ms (ran ${currentCmdIdx}/${commands.length} commands)`));
     }, timeoutMs);
+
+    // Helper: set per-command timeout that auto-skips to next command
+    const setPerCmdTimer = () => {
+      if (perCmdTimer) clearTimeout(perCmdTimer);
+      perCmdTimer = setTimeout(() => {
+        if (cmdSentForCurrent) {
+          console.warn(`[ssh] ${config.host}: command ${currentCmdIdx + 1}/${commands.length} TIMED OUT after ${perCmdTimeoutMs}ms — skipping to next`);
+          // Save what we have so far for this command
+          if (collectedOutput.trim()) {
+            results[currentCmdIdx] = collectedOutput;
+          }
+          // Move to next command
+          currentCmdIdx++;
+          if (currentCmdIdx >= commands.length) {
+            clearTimeout(overallTimer);
+            try { stream.end(); } catch {}
+            try { conn.end(); } catch {}
+            resolve(results);
+            return;
+          }
+          collectedOutput = "";
+          cmdSentForCurrent = true;
+          stream.write(commands[currentCmdIdx] + "\n");
+          setPerCmdTimer();  // reset timer for next command
+        }
+      }, perCmdTimeoutMs);
+    };
+    const clearPerCmdTimer = () => {
+      if (perCmdTimer) { clearTimeout(perCmdTimer); perCmdTimer = null; }
+    };
 
     conn.on("ready", () => {
       console.warn(`[ssh] ${config.host}: connected, opening shell...`);
@@ -248,6 +284,7 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
                       cmdSentForCurrent = true;
                       collectedOutput = "";
                       stream.write(commands[0] + "\n");
+                      setPerCmdTimer();  // start per-command timeout
                     }, 200);
                   }, 200);
                 }, 200);
@@ -264,6 +301,7 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
                 cmdSentForCurrent = true;
                 collectedOutput = "";
                 stream.write(commands[0] + "\n");
+                setPerCmdTimer();  // start per-command timeout
               }, 500);
             }
             return;
@@ -321,6 +359,7 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
             );
             results[currentCmdIdx] = lines.join("\n");
             console.warn(`[ssh] ${config.host}: command ${currentCmdIdx + 1}/${commands.length} done (${results[currentCmdIdx].length} bytes) — "${cmd.slice(0, 30)}"`);
+            clearPerCmdTimer();
 
             // Move to next command
             currentCmdIdx++;
@@ -336,11 +375,13 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
             cmdSentForCurrent = true;
             collectedOutput = "";
             stream.write(commands[currentCmdIdx] + "\n");
+            setPerCmdTimer();  // start timer for next command
           }
         });
         stream.stderr.on("data", () => { /* ignore */ });
         stream.on("close", () => {
           clearTimeout(overallTimer);
+          clearPerCmdTimer();
           try { conn.end(); } catch {}
           // Resolve with what we have so far
           resolve(results);
@@ -1322,18 +1363,20 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   // IMPORTANT: Order commands by priority — most important first.
   // If the switch drops the SSH connection after ~10 commands (common on
   // Catalyst SMB due to session limits), we still get the critical data.
+  // Tighter command list — 7 commands instead of 11.
+  // Each command takes ~5-15s on Catalyst SMB switches, so 7 commands × ~12s = ~85s
+  // fits within the 180s overall timeout with margin for handshake/login.
+  // Removed lower-priority commands: show lldp, show power inline, show environment power,
+  // show inventory, show system, show cdp neighbors detail.
+  // Kept the essentials: version, ports, CDP, SFP transceiver, ports description.
   const commands = [
     "show version",
-    "show ports details",                       // port status (Cisco SMB) — HIGH PRIORITY
-    "show cdp neighbors",                       // CDP neighbors — HIGH PRIORITY
-    "show interfaces transceiver",              // SFP DOM — HIGH PRIORITY
+    "show ports details",                       // port status (HIGH PRIORITY)
+    "show cdp neighbors",                       // CDP neighbors (HIGH PRIORITY)
+    "show interfaces transceiver",              // SFP DOM (HIGH PRIORITY)
     "show ports description",                   // port descriptions
-    "show lldp neighbors",                      // LLDP neighbors
-    "show power inline",                        // PoE
-    "show environment power",                   // PSU status
+    "show system",                             // uptime
     "show inventory",                           // transceiver part numbers
-    "show system",                             // Cisco SMB — uptime + system info
-    "show cdp neighbors detail",                // CDP with IP addresses (lower priority)
   ];
 
   let outputs: string[];
@@ -1356,18 +1399,14 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   }
 
   // Parse each command's output
-  // Command order (CPU/memory removed per user request):
+  // Command order (7 commands, CPU/memory removed):
   //   0: show version
   //   1: show ports details           — port status (HIGH PRIORITY)
   //   2: show cdp neighbors           — CDP neighbors (HIGH PRIORITY)
   //   3: show interfaces transceiver  — SFP DOM (HIGH PRIORITY)
   //   4: show ports description
-  //   5: show lldp neighbors
-  //   6: show power inline
-  //   7: show environment power
-  //   8: show inventory
-  //   9: show system                  — Cisco SMB uptime
-  //  10: show cdp neighbors detail     (fallback for IP addresses)
+  //   5: show system                  — Cisco SMB uptime
+  //   6: show inventory               — transceiver part numbers
   let commandsRun = 0;
   let sshError: string | null = null;
 
@@ -1406,29 +1445,11 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   }
   if (ports.length > 0) commandsRun++;
 
-  // 2: show cdp neighbors (HIGH PRIORITY — comes before detail)
-  // 10: show cdp neighbors detail (fallback for IP addresses)
+  // 2: show cdp neighbors (HIGH PRIORITY)
   if (outputs[2] && !outputs[2].includes("% Unrecognized")) {
     const cdp = parseShowCdpNeighbors(outputs[2], false);
     result.neighbors.push(...cdp);
     if (cdp.length > 0) commandsRun++;
-  }
-  // Also try detail version (index 10) — has IP addresses we can use
-  if (outputs[10] && !outputs[10].includes("% Unrecognized")) {
-    const cdpDetail = parseShowCdpNeighbors(outputs[10], true);
-    // Merge: if detail has IPs we didn't get from basic, update existing neighbors
-    for (const detailNeighbor of cdpDetail) {
-      const existing = result.neighbors.find(n =>
-        n.deviceId === detailNeighbor.deviceId && n.devicePort === detailNeighbor.devicePort
-      );
-      if (existing) {
-        if (!existing.address && detailNeighbor.address) existing.address = detailNeighbor.address;
-        if (!existing.platform && detailNeighbor.platform) existing.platform = detailNeighbor.platform;
-      } else {
-        // New neighbor from detail that wasn't in basic
-        result.neighbors.push(detailNeighbor);
-      }
-    }
   }
 
   // 3: show interfaces transceiver — SFP DOM readings (HIGH PRIORITY)
@@ -1463,59 +1484,9 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     }
   }
 
-  // 5: show lldp neighbors
-  if (outputs[5] && !outputs[5].includes("% Unrecognized")) {
-    const lldp = parseShowLldpNeighbors(outputs[5]);
-    result.neighbors.push(...lldp);
-  }
-
-  // 6: show power inline
-  if (outputs[6] && !outputs[6].includes("% Unrecognized")) {
-    const { totalPoeWatts } = parseShowPowerInline(outputs[6]);
-    if (totalPoeWatts != null) {
-      if (!result.power) result.power = { powerSupplies: [], totalPoeMilliWatts: totalPoeWatts * 1000, totalPoeWatts };
-      else { result.power.totalPoeWatts = totalPoeWatts; result.power.totalPoeMilliWatts = totalPoeWatts * 1000; }
-    }
-  }
-
-  // 7: show environment power
-  if (outputs[7] && !outputs[7].includes("% Unrecognized")) {
-    const psus = parseShowEnvironmentPower(outputs[7]);
-    if (psus.length > 0) {
-      if (!result.power) result.power = { powerSupplies: psus, totalPoeMilliWatts: null, totalPoeWatts: null };
-      else result.power.powerSupplies = psus;
-    }
-  }
-
-  // 8: show inventory — transceiver part numbers and serials
-  if (outputs[8] && !outputs[8].includes("% Unrecognized")) {
-    const inventory = parseShowInventory(outputs[8]);
-    if (inventory.size > 0) {
-      // Enrich the transceivers we already parsed with part numbers / serials
-      for (const t of result.transceivers) {
-        const inv = inventory.get((t.name || "").toLowerCase());
-        if (inv) {
-          t.modelName = inv.partNumber;
-          t.serialNum = inv.serialNumber;
-          t.descr = inv.descr;
-        }
-      }
-      // Also enrich interfaces with transceiver info
-      for (const iface of result.interfaces) {
-        const inv = inventory.get((iface.ifName || "").toLowerCase());
-        if (inv) {
-          (iface as any).transceiverType = inv.descr;
-          (iface as any).partNumber = inv.partNumber;
-          (iface as any).serialNumber = inv.serialNumber;
-        }
-      }
-      console.warn(`[cli] ${row.name}: parsed ${inventory.size} inventory entries`);
-    }
-  }
-
-  // 9: show system — Cisco SMB uptime + system info
-  if (outputs[9] && !outputs[9].includes("% Unrecognized") && !result.uptimeSeconds) {
-    const sysOut = outputs[9];
+  // 5: show system — Cisco SMB uptime + system info
+  if (outputs[5] && !outputs[5].includes("% Unrecognized") && !result.uptimeSeconds) {
+    const sysOut = outputs[5];
     // Try format: "System Up Time (days,hours:minutes:seconds):  1,02:30:15"
     const upDaysHms = sysOut.match(/System Up Time[^:]*:\s*(\d+),(\d+):(\d+):(\d+)/i);
     if (upDaysHms) {
@@ -1547,6 +1518,32 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
       if (upTime) {
         result.uptimeSeconds = parseInt(upTime[1]) * 3600 + parseInt(upTime[2]) * 60 + parseInt(upTime[3]);
       }
+    }
+  }
+
+  // 6: show inventory — transceiver part numbers and serials
+  if (outputs[6] && !outputs[6].includes("% Unrecognized")) {
+    const inventory = parseShowInventory(outputs[6]);
+    if (inventory.size > 0) {
+      // Enrich the transceivers we already parsed with part numbers / serials
+      for (const t of result.transceivers) {
+        const inv = inventory.get((t.name || "").toLowerCase());
+        if (inv) {
+          t.modelName = inv.partNumber;
+          t.serialNum = inv.serialNumber;
+          t.descr = inv.descr;
+        }
+      }
+      // Also enrich interfaces with transceiver info
+      for (const iface of result.interfaces) {
+        const inv = inventory.get((iface.ifName || "").toLowerCase());
+        if (inv) {
+          (iface as any).transceiverType = inv.descr;
+          (iface as any).partNumber = inv.partNumber;
+          (iface as any).serialNumber = inv.serialNumber;
+        }
+      }
+      console.warn(`[cli] ${row.name}: parsed ${inventory.size} inventory entries`);
     }
   }
 
