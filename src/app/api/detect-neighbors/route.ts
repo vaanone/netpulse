@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { pollSwitch } from "@/lib/snmp";
+import { pollSwitchViaSsh } from "@/lib/cli-poll";
 
 // POST /api/detect-neighbors
-// Body: { name, ipAddress, snmpVersion, community?, snmpPort?, v3... }
+// Body: { name, ipAddress, snmpVersion, community?, snmpPort?, v3...,
+//         sshEnabled?, cliProtocol?, sshUsername?, sshPassword?, sshPort? }
 // Returns: { reachable, neighbors: [{ deviceId, devicePort, address, matchedSwitchId?, matchedSwitchName?, protocol }] }
 //
 // This endpoint polls a switch (that hasn't been added yet) and checks
 // its CDP/LLDP neighbors against all switches already configured in NETPULSE.
-// If the switch is unreachable (simulation mode), it returns simulated
-// neighbors based on IP subnet proximity.
+// Tries SNMP first, falls back to SSH/Telnet if SNMP returns no neighbors.
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -33,6 +34,12 @@ export async function POST(req: NextRequest) {
     v3AuthPassword: body.v3AuthPassword || null,
     v3PrivProtocol: body.v3PrivProtocol || null,
     v3PrivPassword: body.v3PrivPassword || null,
+    // SSH/Telnet credentials for CLI fallback
+    sshEnabled: Boolean(body.sshEnabled ?? false),
+    cliProtocol: body.cliProtocol === "telnet" ? "telnet" : "ssh",
+    sshUsername: body.sshUsername || null,
+    sshPassword: body.sshPassword || null,
+    sshPort: Number(body.sshPort ?? (body.cliProtocol === "telnet" ? 23 : 22)),
     nextSwitchId: null,
     status: "unknown",
     lastSeen: null,
@@ -47,7 +54,34 @@ export async function POST(req: NextRequest) {
       select: { id: true, name: true, ipAddress: true, ringId: true },
     });
 
-    const poll = await pollSwitch(tempSwitch as any);
+    let poll = await pollSwitch(tempSwitch as any);
+
+    // ─── SSH/Telnet fallback for neighbor detection ───
+    // If SNMP returned 0 neighbors AND CLI credentials are provided, try CLI.
+    // On Catalyst SMB switches, SNMP may return sysDescr but not CDP neighbors
+    // correctly — running 'show cdp neighbors' via SSH/Telnet is more reliable.
+    if (
+      (poll.neighbors || []).length === 0 &&
+      tempSwitch.sshEnabled &&
+      tempSwitch.sshUsername &&
+      tempSwitch.sshPassword
+    ) {
+      console.warn(`[detect-neighbors] ${tempSwitch.ipAddress}: SNMP returned 0 neighbors, trying ${tempSwitch.cliProtocol.toUpperCase()} fallback`);
+      try {
+        const cliResult = await pollSwitchViaSsh(tempSwitch as any);
+        if (cliResult && (cliResult.neighbors || []).length > 0) {
+          console.warn(`[detect-neighbors] ${tempSwitch.ipAddress}: ${tempSwitch.cliProtocol.toUpperCase()} found ${cliResult.neighbors.length} neighbors`);
+          // Use the CLI result — preserve sysDescr from SNMP if available
+          if (!cliResult.sysDescr && poll.sysDescr) cliResult.sysDescr = poll.sysDescr;
+          if (!cliResult.sysName && poll.sysName) cliResult.sysName = poll.sysName;
+          poll = cliResult;
+        } else {
+          console.warn(`[detect-neighbors] ${tempSwitch.ipAddress}: ${tempSwitch.cliProtocol.toUpperCase()} returned no neighbors`);
+        }
+      } catch (e: any) {
+        console.warn(`[detect-neighbors] ${tempSwitch.ipAddress}: ${tempSwitch.cliProtocol.toUpperCase()} fallback failed: ${e?.message}`);
+      }
+    }
 
     // Match each discovered neighbor against existing switches
     const neighbors = (poll.neighbors || []).map((n) => {
@@ -62,7 +96,7 @@ export async function POST(req: NextRequest) {
           matchedSwitchName = byIp.name;
         }
       }
-      // 2. Match by hostname
+      // 2. Match by hostname (exact, case-insensitive)
       if (!matchedSwitchId && n.deviceId) {
         const byName = existingSwitches.find(s => s.name.toLowerCase() === n.deviceId!.toLowerCase());
         if (byName) {
@@ -70,7 +104,7 @@ export async function POST(req: NextRequest) {
           matchedSwitchName = byName.name;
         }
       }
-      // 3. Fuzzy match by hostname suffix
+      // 3. Fuzzy match by hostname suffix (handles FQDNs like "switch2.example.com" → "switch2")
       if (!matchedSwitchId && n.deviceId) {
         const lowerId = n.deviceId.toLowerCase();
         const bySuffix = existingSwitches.find(s =>
@@ -80,6 +114,17 @@ export async function POST(req: NextRequest) {
         if (bySuffix) {
           matchedSwitchId = bySuffix.id;
           matchedSwitchName = bySuffix.name;
+        }
+      }
+      // 4. Fuzzy match: switch name appears anywhere in deviceId
+      if (!matchedSwitchId && n.deviceId) {
+        const lowerId = n.deviceId.toLowerCase();
+        const byContains = existingSwitches.find(s =>
+          lowerId.includes(s.name.toLowerCase()) && s.name.length >= 3
+        );
+        if (byContains) {
+          matchedSwitchId = byContains.id;
+          matchedSwitchName = byContains.name;
         }
       }
 
@@ -93,38 +138,12 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // In simulation mode: also check ALL existing switches in the same IP subnet
-    // This catches switches that the simulator might not have generated as CDP neighbors
-    if (!poll.reachable) {
-      const ipParts = body.ipAddress.split(".").map(Number);
-      if (ipParts.length === 4) {
-        const subnet = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
-        const sameSubnet = existingSwitches.filter(s => {
-          if (s.ipAddress === body.ipAddress) return false; // skip self
-          const parts = s.ipAddress.split(".");
-          return parts.length === 4 && `${parts[0]}.${parts[1]}.${parts[2]}` === subnet;
-        });
-        for (const sw of sameSubnet) {
-          const alreadyAdded = neighbors.some(n => n.matchedSwitchId === sw.id);
-          if (!alreadyAdded) {
-            neighbors.push({
-              deviceId: sw.name,
-              devicePort: "auto-detected",
-              address: sw.ipAddress,
-              protocol: "cdp",
-              matchedSwitchId: sw.id,
-              matchedSwitchName: sw.name,
-            });
-          }
-        }
-      }
-    }
-
     return NextResponse.json({
-      reachable: poll.reachable,
+      reachable: poll.reachable || (poll.neighbors || []).length > 0,
       mode: poll.mode,
       sysName: poll.sysName,
       neighbors,
+      method: (poll.neighbors || []).length > 0 && poll.reachable ? "snmp" : "cli",
     });
   } catch (err: any) {
     return NextResponse.json({
@@ -132,6 +151,6 @@ export async function POST(req: NextRequest) {
       mode: "simulate",
       neighbors: [],
       error: err?.message ?? "Detection failed",
-    });
+    }, { status: 500 });
   }
 }

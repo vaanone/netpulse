@@ -2604,6 +2604,12 @@ function SwitchFormDialog(props: {
           snmpPort,
           v3SecurityLevel, v3Username, v3AuthProtocol, v3AuthPassword,
           v3PrivProtocol, v3PrivPassword,
+          // Also send SSH/Telnet credentials so the endpoint can fall back to CLI
+          sshEnabled,
+          cliProtocol,
+          sshUsername: sshEnabled ? sshUsername : null,
+          sshPassword: sshEnabled ? sshPassword : null,
+          sshPort,
         }),
       });
       if (!r.ok) throw new Error("Detection failed");
