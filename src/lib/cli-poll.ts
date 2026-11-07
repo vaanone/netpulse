@@ -914,19 +914,27 @@ function parseShowCdpNeighbors(output: string, detail: boolean): CdpNeighbor[] {
     // Parse detail blocks
     const blocks = output.split(/--------------------------/);
     for (const block of blocks) {
-      const devIdMatch = block.match(/Device ID:\s*(.+)/i);
+      // Match both "Device ID:" (standard IOS) and "Device-ID:" (Cisco SMB)
+      const devIdMatch = block.match(/Device[-\s]?ID:\s*(.+)/i);
       if (!devIdMatch) continue;
       const deviceId = devIdMatch[1].trim();
-      const ipMatch = block.match(/IP(?:v4)? address:\s*(\d+\.\d+\.\d+\.\d+)/i);
+      // Match "IP address:" or "IP 192.168.10.202" (Cisco SMB format)
+      const ipMatch = block.match(/(?:IP(?:v4)?\s*address:|IP\s+)(\d+\.\d+\.\d+\.\d+)/i);
       const address = ipMatch ? ipMatch[1] : null;
-      const platMatch = block.match(/Platform:\s*([^,]+)/i);
+      const platMatch = block.match(/Platform:\s*([^,\r\n]+)/i);
       const platform = platMatch ? platMatch[1].trim() : null;
+      // Match "Interface: gi25, Port ID (outgoing port): gi28"
       const ifMatch = block.match(/Interface:\s*(\S+),\s*Port ID[^:]*:\s*(\S+)/i);
+      // Match "SysName: HPC2" — gives us the configured hostname (better than MAC-based deviceId)
+      const sysNameMatch = block.match(/SysName:\s*(\S+)/i);
+      const sysName = sysNameMatch ? sysNameMatch[1] : null;
       if (ifMatch) {
         neighbors.push({
-          localIfIndex: 0, // will be set later by matching ifName
+          localIfIndex: 0,
           localIfName: ifMatch[1],
-          deviceId,
+          // If we have a SysName, prefer it as the deviceId — it's the configured hostname
+          // (e.g. "HPC2") instead of the MAC-based default (e.g. "24d79cf6b320")
+          deviceId: sysName || deviceId,
           devicePort: ifMatch[2],
           address,
           platform,
@@ -1355,17 +1363,17 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
   // If the switch drops the SSH connection after ~10 commands (common on
   // Catalyst SMB due to session limits), we still get the critical data.
   // 7 commands — all known to work on Catalyst SMB 1300 firmware.
-  // Removed 'show ports description' (returns '% bad parameter value').
-  // Removed setup commands (terminal length 0 etc.) — they return '% Unrecognized'
-  // and trigger premature prompt detection.
+  // IMPORTANT: Catalyst 1300 uses different command syntax than Catalyst 9300:
+  //   - 'show ports details' → '% Unrecognized command' (use 'show ports status' instead)
+  //   - 'show interfaces transceiver' → '% bad parameter value' (use 'show fiber-ports optical-transceiver' instead)
   const commands = [
     "show version",
-    "show ports details",                       // port status (HIGH PRIORITY)
+    "show ports status",                       // port status — Catalyst SMB syntax
     "show cdp neighbors",                       // CDP neighbors (HIGH PRIORITY)
-    "show interfaces transceiver",              // SFP DOM (HIGH PRIORITY)
+    "show fiber-ports optical-transceiver",     // SFP DOM — Catalyst SMB syntax
     "show system",                             // uptime + system info
     "show inventory",                           // transceiver part numbers
-    "show cdp neighbors detail",               // CDP with IP addresses
+    "show cdp neighbors detail",               // CDP with IP addresses + SysName
   ];
 
   let outputs: string[];
