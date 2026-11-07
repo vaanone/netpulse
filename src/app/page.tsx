@@ -3101,6 +3101,33 @@ function SwitchFormDialog(props: {
               </div>
             )}
           </div>
+
+          {/* Manual Next Switch selector — fallback when Auto-Detect doesn't find neighbors */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Next Switch (manual)</Label>
+            <Select
+              value={nextSwitchId || "__none__"}
+              onValueChange={(v) => setNextSwitchId(v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="— none —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— none —</SelectItem>
+                {switches
+                  .filter(s => s.id !== editing?.id)
+                  .map(s => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} ({s.ipAddress})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <div className="text-[10px] text-muted-foreground">
+              Manually pick which switch this one connects to (ring topology).
+              Use this if Auto-Detect can't find CDP neighbors.
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
