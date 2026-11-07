@@ -49,3 +49,9 @@ $ next dev -p 3000
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
+[poller] Mum-Core-01: SSH/Telnet enabled — running CLI poll (SSH admin@10.10.1.11:22)
+[poller] Mum-Core-01: SSH/Telnet enabled — running CLI poll (SSH admin@10.10.1.11:22)
