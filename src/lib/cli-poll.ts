@@ -273,15 +273,42 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
           collectedOutput += data.toString("utf8");
 
           // Check if we got the prompt back — command finished.
-          // Match more loosely: any line ending in # or > (optionally followed by whitespace)
-          // OR a "--More--" prompt (which means paging wasn't disabled, send space to continue)
-          if (/--\s*[Mm]ore\s*--/.test(collectedOutput.slice(-20))) {
-            // Send space to page through (shouldn't happen but just in case)
-            stream.write(" ");
-            collectedOutput = collectedOutput.replace(/--\s*[Mm]ore\s*--\s*/, "");
+          // The prompt is at the very END of the output. Only check the last 20 chars.
+          // Wait at least 100 bytes of output before checking (to avoid matching the
+          // command echo as a prompt).
+          if (collectedOutput.length < 50) {
+            // Not enough output yet — keep waiting
             return;
           }
-          if (/[a-zA-Z0-9._-]*(\([^)]*\))?[>#]\s*$/.test(collectedOutput.slice(-100))) {
+
+          // Handle --More-- paging (send space to continue)
+          if (/--\s*[Mm]ore\s*--/.test(collectedOutput.slice(-20))) {
+            stream.write(" ");
+            collectedOutput = collectedOutput.replace(/--\s*[Mm]ore\s*--\s*$/, "");
+            return;
+          }
+
+          // Check if the LAST 20 chars contain a prompt:
+          // - Line ending in # or > (Cisco standard prompt)
+          // - Optionally preceded by hostname
+          // - Or "(config)#" mode prompt
+          const lastChars = collectedOutput.slice(-20);
+          // Match: <word>(<word>)?# or <word>(<word>)>? at end of string
+          const promptMatch = lastChars.match(/([a-zA-Z0-9._-]+(?:\([^)]*\))?)?[>#]\s*$/);
+          if (promptMatch) {
+            // Verify it's a real prompt by checking the prompt is followed by no more data
+            // (i.e. the # or > is at the very end of what we've received so far)
+            const promptText = promptMatch[0];
+            const promptStart = collectedOutput.length - promptText.length;
+            // Make sure we're not matching a # in the middle of the output
+            // (e.g. version "4.1.3#" — though unlikely, just be safe)
+            // The prompt should be at the END of a line
+            const beforePrompt = collectedOutput.slice(0, promptStart);
+            if (!beforePrompt.endsWith("\n") && !beforePrompt.endsWith("\r") && beforePrompt.length > 0) {
+              // The # is in the middle of a line, not at end — not a prompt, keep waiting
+              return;
+            }
+
             // Strip command echo and trailing prompt
             const cmd = commands[currentCmdIdx];
             const lines = collectedOutput.split("\n").filter(l =>
@@ -289,6 +316,7 @@ async function runSshCommandsBatch(config: CliConfig, commands: string[]): Promi
               !/[a-zA-Z0-9._-]*(\([^)]*\))?[>#]\s*$/.test(l.trim()) &&
               !l.includes("terminal length") &&
               !l.includes("terminal datadump") &&
+              !l.includes("terminal no echo") &&
               l.trim() !== ""
             );
             results[currentCmdIdx] = lines.join("\n");
