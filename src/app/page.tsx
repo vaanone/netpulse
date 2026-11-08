@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * NETPULSE — ISP Network Monitoring Tool
+ * NETPULSE ISP Network Manager
  * Cisco SFP & Ring Traffic Monitoring Dashboard
  *
  * A JJ TechHub Product.
@@ -822,7 +822,7 @@ function Header(props: {
           </span>
           <div className="min-w-0">
             <div className="font-bold text-base sm:text-lg tracking-wider leading-none">NETPULSE</div>
-            <div className="text-[10px] sm:text-xs text-muted-foreground tracking-wide truncate">A JJ TechHub Product</div>
+            <div className="text-[10px] sm:text-xs text-muted-foreground tracking-wide truncate">NETPULSE ISP Network Manager - A JJ TechHub Product</div>
           </div>
         </div>
 
@@ -2140,7 +2140,7 @@ function Footer({ polledAt }: { polledAt?: string }) {
     <footer className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-panel/95 backdrop-blur">
       <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6 h-10 flex items-center justify-center text-[10px] sm:text-xs text-muted-foreground gap-2 flex-wrap">
         <span className="size-1.5 rounded-full bg-primary shrink-0" />
-        <span className="truncate">A JJ TechHub Product</span>
+        <span className="truncate">NETPULSE ISP Network Manager - A JJ TechHub Product</span>
         <span className="hidden sm:inline">·</span>
         <span className="hidden sm:inline">{POLL_INTERVAL_LABEL}</span>
         <span>·</span>
