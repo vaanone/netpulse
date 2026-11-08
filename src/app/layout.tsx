@@ -10,7 +10,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "NETPULSE — ISP Network Monitoring Tool",
+  title: "NETPULSE — A JJ TechHub Product",
   description: "NETPULSE — ISP network monitoring tool for Cisco managed switches: SFP DOM, per-link traffic Mbps, switch health, multi-branch ring topology, CDP/LLDP auto-detection and alerts.",
   keywords: ["NETPULSE", "ISP", "network monitoring", "Cisco", "SFP", "DOM", "SNMP", "ring topology", "NOC dashboard", "Mbps", "CDP", "LLDP"],
   icons: { icon: "/netpulse-logo.png", apple: "/netpulse-logo.png" },

@@ -1,8 +1,16 @@
 $ next dev -p 3000
 ▲ Next.js 16.1.3 (Turbopack)
 - Local:         http://localhost:3000
-- Network:       http://21.0.15.141:3000
+- Network:       http://21.0.1.123:3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 601ms
+✓ Ready in 639ms
+ GET /api/metrics 200 in 281ms (compile: 258ms, render: 23ms)
+○ Compiling / ...
+ GET / 200 in 3.4s (compile: 3.1s, render: 300ms)
+ GET /api/metrics 200 in 8ms (compile: 3ms, render: 5ms)
+ GET /api/switches 200 in 49ms (compile: 40ms, render: 9ms)
+ GET /api/companies 200 in 27ms (compile: 20ms, render: 7ms)
+ GET /api/rings 200 in 28ms (compile: 20ms, render: 8ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 27ms (compile: 20ms, render: 7ms)
