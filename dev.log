@@ -14,3 +14,8 @@ $ next dev -p 3000
  GET /api/companies 200 in 27ms (compile: 20ms, render: 7ms)
  GET /api/rings 200 in 28ms (compile: 20ms, render: 8ms)
  GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 27ms (compile: 20ms, render: 7ms)
+ GET /api/metrics 200 in 7ms (compile: 3ms, render: 4ms)
+ GET /api/switches 200 in 12ms (compile: 3ms, render: 9ms)
+ GET /api/rings 200 in 13ms (compile: 7ms, render: 6ms)
+ GET /api/companies 200 in 10ms (compile: 3ms, render: 7ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 10ms (compile: 5ms, render: 5ms)
