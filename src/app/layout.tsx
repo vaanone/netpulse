@@ -17,7 +17,10 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  try { await ensureSeedSwitches(); } catch (e) { console.error("Seed error:", e); }
+  // Don't await seed/polling in layout — it blocks ALL HTTP requests
+  // (including the HTML page itself) while SSH polls run (~70s).
+  // Fire it off in the background instead.
+  ensureSeedSwitches().catch((e) => console.error("Seed error:", e));
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
