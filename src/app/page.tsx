@@ -474,6 +474,11 @@ function SectionTitle({ icon, title, subtitle, action }: {
 export default function Home() {
   const queryClient = useQueryClient();
 
+  // --- Auto refresh toggle (declared BEFORE queries that use it) ---
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(() => {
+    try { return localStorage.getItem("np-autorefresh") !== "false"; } catch { return true; }
+  });
+
   // --- Queries ---
   const metricsQ = useQuery<MetricsSnapshot>({
     queryKey: ["metrics"],
@@ -482,7 +487,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load metrics");
       return r.json();
     },
-    refetchInterval: 15_000,
+    refetchInterval: autoRefreshEnabled ? 15_000 : false,
   });
 
   const switchesQ = useQuery<SwitchRow[]>({
@@ -492,7 +497,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load switches");
       return r.json();
     },
-    refetchInterval: 30_000,
+    refetchInterval: autoRefreshEnabled ? 30_000 : false,
   });
 
   const companiesQ = useQuery<CompanyRow[]>({
@@ -502,7 +507,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load companies");
       return r.json();
     },
-    refetchInterval: 30_000,
+    refetchInterval: autoRefreshEnabled ? 30_000 : false,
   });
 
   const ringsQ = useQuery<RingRow[]>({
@@ -512,7 +517,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load rings");
       return r.json();
     },
-    refetchInterval: 30_000,
+    refetchInterval: autoRefreshEnabled ? 30_000 : false,
   });
 
   const alertsQ = useQuery<AlertRow[]>({
@@ -522,7 +527,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load alerts");
       return r.json();
     },
-    refetchInterval: 10_000,
+    refetchInterval: autoRefreshEnabled ? 10_000 : false,
   });
 
   const [showAllAlerts, setShowAllAlerts] = React.useState(false);
@@ -534,7 +539,7 @@ export default function Home() {
       return r.json();
     },
     enabled: showAllAlerts,
-    refetchInterval: 15_000,
+    refetchInterval: autoRefreshEnabled ? 15_000 : false,
   });
 
   // --- Poll Now mutation ---
@@ -576,6 +581,41 @@ export default function Home() {
   const [editingSwitch, setEditingSwitch] = React.useState<SwitchRow | null>(null);
   const [detailSwitchId, setDetailSwitchId] = React.useState<string | null>(null);
   const [allAlertsOpen, setAllAlertsOpen] = React.useState(false);
+
+  // --- Section visibility (persisted in localStorage) ---
+  const [sectionVisibility, setSectionVisibility] = React.useState<Record<string, boolean>>(() => {
+    try { const s = localStorage.getItem("np-vis"); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
+  const toggleSection = (id: string) => {
+    setSectionVisibility(prev => {
+      const next = { ...prev, [id]: prev[id] === false ? true : false };
+      try { localStorage.setItem("np-vis", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const isSectionVisible = (id: string) => sectionVisibility[id] !== false;
+
+  // --- Auto poll toggle (persisted) ---
+  const [autoPollEnabled, setAutoPollEnabled] = React.useState(() => {
+    try { return localStorage.getItem("np-autopoll") !== "false"; } catch { return true; }
+  });
+  const toggleAutoPoll = () => {
+    setAutoPollEnabled(prev => {
+      const next = !prev;
+      try { localStorage.setItem("np-autopoll", String(next)); } catch {}
+      if (next) fetch("/api/poll", { method: "POST" }).catch(() => {});
+      return next;
+    });
+  };
+
+  // --- Auto refresh toggle function (state declared above, before queries) ---
+  const toggleAutoRefresh = () => {
+    setAutoRefreshEnabled(prev => {
+      const next = !prev;
+      try { localStorage.setItem("np-autorefresh", String(next)); } catch {}
+      return next;
+    });
+  };
 
   // --- Derived data ---
   const snapshot = metricsQ.data;
@@ -654,28 +694,37 @@ export default function Home() {
         />
 
         {/* b. Ring Topology */}
+        {isSectionVisible("ring-topology") && (
         <RingTopology
           switches={switches}
           links={links}
           onSwitchClick={(id) => setDetailSwitchId(id)}
         />
+        )}
 
         {/* c. Search Switch */}
+        {isSectionVisible("search-switch") && (
         <SearchSwitch
           switches={switches}
           onSwitchClick={(id) => setDetailSwitchId(id)}
         />
+        )}
 
         {/* d. Ring Traffic */}
+        {isSectionVisible("ring-traffic") && (
         <RingTraffic links={links} onSwitchClick={(id) => setDetailSwitchId(id)} />
+        )}
 
         {/* e. Switch Health */}
+        {isSectionVisible("switch-health") && (
         <SwitchHealth
           switches={switches}
           onSwitchClick={(id) => setDetailSwitchId(id)}
         />
+        )}
 
         {/* f. Main grid: SFP DOM (2 cols) + Switches (1 col) */}
+        {isSectionVisible("sfp-dom") && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
           <div className="lg:col-span-2">
             <SfpDomCards switches={switches} onSwitchClick={(id) => setDetailSwitchId(id)} />
@@ -693,11 +742,15 @@ export default function Home() {
             />
           </div>
         </div>
+        )}
 
         {/* g. All Interfaces */}
+        {isSectionVisible("all-interfaces") && (
         <AllInterfaces switches={switches} onSwitchClick={(id) => setDetailSwitchId(id)} />
+        )}
 
         {/* h. Alerts Feed — below All Interfaces */}
+        {isSectionVisible("alerts") && (
         <AlertsFeed
           alerts={alerts}
           onOpenAll={() => { setShowAllAlerts(true); setAllAlertsOpen(true); }}
@@ -716,6 +769,7 @@ export default function Home() {
           onSwitchClick={(id) => setDetailSwitchId(id)}
           loading={alertsQ.isLoading}
         />
+        )}
       </main>
 
       {/* =========================================================
@@ -746,6 +800,12 @@ export default function Home() {
           setSettingsMenuOpen(false);
           queueMicrotask(() => { setEditingSwitch(null); setSwitchFormOpen(true); });
         }}
+        sectionVisibility={sectionVisibility}
+        onToggleSection={toggleSection}
+        autoPollEnabled={autoPollEnabled}
+        onToggleAutoPoll={toggleAutoPoll}
+        autoRefreshEnabled={autoRefreshEnabled}
+        onToggleAutoRefresh={toggleAutoRefresh}
       />
 
       <ManageCompaniesDialog
@@ -2243,11 +2303,29 @@ function SettingsMenuDialog(props: {
   onOpenChange: (o: boolean) => void;
   onManageCompanies: () => void;
   onAddSwitch: () => void;
+  sectionVisibility: Record<string, boolean>;
+  onToggleSection: (id: string) => void;
+  autoPollEnabled: boolean;
+  onToggleAutoPoll: () => void;
+  autoRefreshEnabled: boolean;
+  onToggleAutoRefresh: () => void;
 }) {
-  const { open, onOpenChange, onManageCompanies, onAddSwitch } = props;
+  const { open, onOpenChange, onManageCompanies, onAddSwitch, sectionVisibility, onToggleSection, autoPollEnabled, onToggleAutoPoll, autoRefreshEnabled, onToggleAutoRefresh } = props;
+
+  const toggleSections = [
+    { id: "summary-kpis", label: "Summary KPIs" },
+    { id: "ring-topology", label: "Ring Topology" },
+    { id: "search-switch", label: "Search Switch" },
+    { id: "ring-traffic", label: "Ring Traffic (Mbps) & Utilization" },
+    { id: "switch-health", label: "Switch Health" },
+    { id: "sfp-dom", label: "SFP DOM" },
+    { id: "all-interfaces", label: "All SFP / Interfaces" },
+    { id: "alerts", label: "Alerts" },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <span className="flex size-10 items-center justify-center rounded-lg bg-ok/10 text-ok border border-ok/20">
@@ -2255,39 +2333,90 @@ function SettingsMenuDialog(props: {
             </span>
             <div>
               <DialogTitle>Settings</DialogTitle>
-              <DialogDescription>Manage your monitored network.</DialogDescription>
+              <DialogDescription>Manage your monitored network and dashboard layout.</DialogDescription>
             </div>
           </div>
         </DialogHeader>
-        <div className="grid grid-cols-1 gap-3">
-          <button
-            onClick={onManageCompanies}
-            className="flex items-center gap-3 p-4 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-colors text-left"
-          >
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
-              <Building2 className="size-5" />
-            </span>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold">Companies & Branch Rings</div>
-              <div className="text-xs text-muted-foreground">Create companies, branch rings, manage assignments.</div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground ml-auto shrink-0" />
-          </button>
 
-          <button
-            onClick={onAddSwitch}
-            className="flex items-center gap-3 p-4 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-colors text-left"
-          >
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
-              <Plus className="size-5" />
-            </span>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold">Add Switch</div>
-              <div className="text-xs text-muted-foreground">Register a new Cisco switch with SNMP credentials.</div>
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 -mr-1">
+          {/* Auto controls */}
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Automation</div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/60">
+              <div>
+                <div className="text-sm font-medium">Auto Poll</div>
+                <div className="text-[10px] text-muted-foreground">Automatically poll switches every 30 seconds</div>
+              </div>
+              <button
+                onClick={onToggleAutoPoll}
+                className={cn("relative w-11 h-6 rounded-full transition-colors", autoPollEnabled ? "bg-ok" : "bg-muted-foreground/30")}
+              >
+                <span className={cn("absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform", autoPollEnabled && "translate-x-5")} />
+              </button>
             </div>
-            <ChevronRight className="size-4 text-muted-foreground ml-auto shrink-0" />
-          </button>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/60">
+              <div>
+                <div className="text-sm font-medium">Auto Refresh</div>
+                <div className="text-[10px] text-muted-foreground">Refresh dashboard data every 15 seconds</div>
+              </div>
+              <button
+                onClick={onToggleAutoRefresh}
+                className={cn("relative w-11 h-6 rounded-full transition-colors", autoRefreshEnabled ? "bg-ok" : "bg-muted-foreground/30")}
+              >
+                <span className={cn("absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform", autoRefreshEnabled && "translate-x-5")} />
+              </button>
+            </div>
+          </div>
+
+          {/* Section visibility */}
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dashboard Sections</div>
+            <div className="space-y-1">
+              {toggleSections.map((s) => (
+                <div key={s.id} className="flex items-center justify-between p-2 rounded-md hover:bg-accent/20">
+                  <span className="text-sm">{s.label}</span>
+                  <button
+                    onClick={() => onToggleSection(s.id)}
+                    className={cn("relative w-11 h-6 rounded-full transition-colors", sectionVisibility[s.id] !== false ? "bg-ok" : "bg-muted-foreground/30")}
+                  >
+                    <span className={cn("absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform", sectionVisibility[s.id] !== false && "translate-x-5")} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Management buttons */}
+          <div className="grid grid-cols-1 gap-3">
+            <button
+              onClick={onManageCompanies}
+              className="flex items-center gap-3 p-3 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-colors text-left"
+            >
+              <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
+                <Building2 className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">Companies & Branch Rings</div>
+                <div className="text-xs text-muted-foreground">Create companies, branch rings</div>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+            </button>
+            <button
+              onClick={onAddSwitch}
+              className="flex items-center gap-3 p-3 rounded-lg border border-border/60 hover:border-primary/40 hover:bg-accent/30 transition-colors text-left"
+            >
+              <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
+                <Plus className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">Add Switch</div>
+                <div className="text-xs text-muted-foreground">Register a new Cisco switch</div>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+            </button>
+          </div>
         </div>
+
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Close</Button>
