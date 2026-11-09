@@ -5,32 +5,16 @@ $ next dev -H 0.0.0.0 -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 619ms
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 221ms (compile: 189ms, render: 32ms)
- GET /api/metrics 200 in 136ms (compile: 129ms, render: 7ms)
- GET / 200 in 3.2s (compile: 3.0s, render: 285ms)
- GET /api/metrics 200 in 9ms (compile: 4ms, render: 5ms)
- GET /api/rings 200 in 63ms (compile: 38ms, render: 25ms)
- GET /api/companies 200 in 71ms (compile: 43ms, render: 29ms)
- GET /api/switches 200 in 48ms (compile: 38ms, render: 10ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 11ms (compile: 6ms, render: 5ms)
- GET / 200 in 46ms (compile: 4ms, render: 43ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 5ms)
- GET /api/metrics 200 in 10ms (compile: 5ms, render: 5ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 3ms, render: 6ms)
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
+✓ Ready in 602ms
+ GET /api/metrics 200 in 328ms (compile: 315ms, render: 13ms)
+ GET /api/switches 200 in 359ms (compile: 276ms, render: 83ms)
+ GET /api/companies 200 in 363ms (compile: 296ms, render: 67ms)
+ GET /api/rings 200 in 375ms (compile: 349ms, render: 25ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 367ms (compile: 217ms, render: 149ms)
+ GET / 200 in 1891ms (compile: 1780ms, render: 111ms)
+ GET / 200 in 3.2s (compile: 2.8s, render: 340ms)
+ GET /api/companies 200 in 12ms (compile: 3ms, render: 9ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 13ms (compile: 6ms, render: 7ms)
+ GET /api/metrics 200 in 7ms (compile: 5ms, render: 3ms)
+ GET /api/rings 200 in 10ms (compile: 2ms, render: 8ms)
+ GET /api/switches 200 in 6ms (compile: 1432µs, render: 4ms)

@@ -582,6 +582,28 @@ export default function Home() {
   const [detailSwitchId, setDetailSwitchId] = React.useState<string | null>(null);
   const [allAlertsOpen, setAllAlertsOpen] = React.useState(false);
 
+  // --- Header button visibility (persisted) ---
+  const [showJumpTo, setShowJumpTo] = React.useState(() => {
+    try { return localStorage.getItem("np-jumpto") !== "false"; } catch { return true; }
+  });
+  const toggleJumpTo = () => {
+    setShowJumpTo(prev => {
+      const next = !prev;
+      try { localStorage.setItem("np-jumpto", String(next)); } catch {}
+      return next;
+    });
+  };
+  const [showPollNow, setShowPollNow] = React.useState(() => {
+    try { return localStorage.getItem("np-pollnow") !== "false"; } catch { return true; }
+  });
+  const togglePollNow = () => {
+    setShowPollNow(prev => {
+      const next = !prev;
+      try { localStorage.setItem("np-pollnow", String(next)); } catch {}
+      return next;
+    });
+  };
+
   // --- Section visibility (persisted in localStorage) ---
   const [sectionVisibility, setSectionVisibility] = React.useState<Record<string, boolean>>(() => {
     try { const s = localStorage.getItem("np-vis"); return s ? JSON.parse(s) : {}; } catch { return {}; }
@@ -677,6 +699,8 @@ export default function Home() {
         onOpenSettings={() => setSettingsOpen(true)}
         onPollNow={() => pollMut.mutate()}
         polling={pollMut.isPending}
+        showJumpTo={showJumpTo}
+        showPollNow={showPollNow}
       />
 
       <main className="px-3 sm:px-4 lg:px-6 py-4 sm:py-6 pb-16 space-y-5 sm:space-y-6 max-w-[1800px] w-full mx-auto">
@@ -806,6 +830,10 @@ export default function Home() {
         onToggleAutoPoll={toggleAutoPoll}
         autoRefreshEnabled={autoRefreshEnabled}
         onToggleAutoRefresh={toggleAutoRefresh}
+        showJumpTo={showJumpTo}
+        onToggleJumpTo={toggleJumpTo}
+        showPollNow={showPollNow}
+        onTogglePollNow={togglePollNow}
       />
 
       <ManageCompaniesDialog
@@ -870,8 +898,10 @@ function Header(props: {
   onOpenSettings: () => void;
   onPollNow: () => void;
   polling: boolean;
+  showJumpTo: boolean;
+  showPollNow: boolean;
 }) {
-  const { soundEnabled, onToggleSound, unackCount, alertsBadgeClass, onOpenAlerts, onOpenSettings, onPollNow, polling } = props;
+  const { soundEnabled, onToggleSound, unackCount, alertsBadgeClass, onOpenAlerts, onOpenSettings, onPollNow, polling, showJumpTo, showPollNow } = props;
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-panel/95 backdrop-blur supports-[backdrop-filter]:bg-panel/80">
       <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6 h-14 sm:h-16 flex items-center gap-3">
@@ -887,6 +917,7 @@ function Header(props: {
         </div>
 
         {/* Jump to */}
+        {showJumpTo && (
         <div className="hidden md:block">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -908,15 +939,18 @@ function Header(props: {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        )}
 
         <div className="flex-1" />
 
         {/* Right actions */}
         <div className="flex items-center gap-2">
+          {showPollNow && (
           <Button variant="outline" size="sm" onClick={onPollNow} disabled={polling} className="gap-1.5">
             <RefreshCw className={cn("size-3.5", polling && "animate-spin")} />
             <span className="hidden sm:inline">Poll Now</span>
           </Button>
+          )}
 
           <Button variant="ghost" size="icon" onClick={onToggleSound} aria-label="Toggle sound" className="size-9">
             {soundEnabled ? <Bell className="size-4" /> : <BellOff className="size-4 text-muted-foreground" />}
@@ -2309,8 +2343,12 @@ function SettingsMenuDialog(props: {
   onToggleAutoPoll: () => void;
   autoRefreshEnabled: boolean;
   onToggleAutoRefresh: () => void;
+  showJumpTo: boolean;
+  onToggleJumpTo: () => void;
+  showPollNow: boolean;
+  onTogglePollNow: () => void;
 }) {
-  const { open, onOpenChange, onManageCompanies, onAddSwitch, sectionVisibility, onToggleSection, autoPollEnabled, onToggleAutoPoll, autoRefreshEnabled, onToggleAutoRefresh } = props;
+  const { open, onOpenChange, onManageCompanies, onAddSwitch, sectionVisibility, onToggleSection, autoPollEnabled, onToggleAutoPoll, autoRefreshEnabled, onToggleAutoRefresh, showJumpTo, onToggleJumpTo, showPollNow, onTogglePollNow } = props;
 
   const toggleSections = [
     { id: "summary-kpis", label: "Summary KPIs" },
@@ -2383,6 +2421,29 @@ function SettingsMenuDialog(props: {
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Header buttons */}
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Header Buttons</div>
+            <div className="flex items-center justify-between p-2 rounded-md hover:bg-accent/20">
+              <span className="text-sm">Jump To</span>
+              <button
+                onClick={onToggleJumpTo}
+                className={cn("relative w-11 h-6 rounded-full transition-colors", showJumpTo ? "bg-ok" : "bg-muted-foreground/30")}
+              >
+                <span className={cn("absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform", showJumpTo && "translate-x-5")} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between p-2 rounded-md hover:bg-accent/20">
+              <span className="text-sm">Poll Now</span>
+              <button
+                onClick={onTogglePollNow}
+                className={cn("relative w-11 h-6 rounded-full transition-colors", showPollNow ? "bg-ok" : "bg-muted-foreground/30")}
+              >
+                <span className={cn("absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform", showPollNow && "translate-x-5")} />
+              </button>
             </div>
           </div>
 
