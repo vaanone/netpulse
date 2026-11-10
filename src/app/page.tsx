@@ -3963,7 +3963,25 @@ function SwitchDetailDialog(props: {
             </div>
           </DetailCard>
 
-          {/* Active Alerts */}
+          {/* SFP / Fiber Ports table */}
+          <DetailCard title="SFP / Fiber Ports" icon={<Signal className="size-4" />} action={<Badge variant="outline" className="text-[10px]">{sfpPorts.length}</Badge>}>
+            {sfpPorts.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-2">No SFP/fiber ports with DOM readings.</div>
+            ) : (
+              <PortTable ports={sfpPorts} />
+            )}
+          </DetailCard>
+
+          {/* Other Interfaces table */}
+          <DetailCard title="Other Interfaces" icon={<LayoutGrid className="size-4" />} action={<Badge variant="outline" className="text-[10px]">{otherPorts.length}</Badge>}>
+            {otherPorts.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-2">No other interfaces.</div>
+            ) : (
+              <PortTable ports={otherPorts} />
+            )}
+          </DetailCard>
+
+          {/* Active Alerts — moved below Other Interfaces */}
           <DetailCard title="Active Alerts" icon={<Siren className="size-4" />} action={<Badge variant="outline" className="text-[10px]">{alerts.length}</Badge>}>
             {alerts.length === 0 ? (
               <div className="flex items-center gap-2 text-xs text-ok py-2">
@@ -3981,24 +3999,6 @@ function SwitchDetailDialog(props: {
                   </div>
                 ))}
               </div>
-            )}
-          </DetailCard>
-
-          {/* SFP / Fiber Ports table */}
-          <DetailCard title="SFP / Fiber Ports" icon={<Signal className="size-4" />} action={<Badge variant="outline" className="text-[10px]">{sfpPorts.length}</Badge>}>
-            {sfpPorts.length === 0 ? (
-              <div className="text-xs text-muted-foreground py-2">No SFP/fiber ports with DOM readings.</div>
-            ) : (
-              <PortTable ports={sfpPorts} />
-            )}
-          </DetailCard>
-
-          {/* Other Interfaces table */}
-          <DetailCard title="Other Interfaces" icon={<LayoutGrid className="size-4" />} action={<Badge variant="outline" className="text-[10px]">{otherPorts.length}</Badge>}>
-            {otherPorts.length === 0 ? (
-              <div className="text-xs text-muted-foreground py-2">No other interfaces.</div>
-            ) : (
-              <PortTable ports={otherPorts} />
             )}
           </DetailCard>
         </div>
