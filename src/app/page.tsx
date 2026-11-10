@@ -4004,6 +4004,19 @@ function SwitchDetailDialog(props: {
 
         <DialogFooter className="gap-2">
           <Button
+            variant="default"
+            onClick={() => {
+              if (detailRowQ.data) {
+                onOpenChange(false);
+                queueMicrotask(() => onEdit(detailRowQ.data));
+              }
+            }}
+            className="gap-1.5"
+          >
+            <Pencil className="size-3.5" />
+            Edit Switch
+          </Button>
+          <Button
             variant="destructive"
             onClick={() => setDeleteGate(true)}
             className="gap-1.5"
