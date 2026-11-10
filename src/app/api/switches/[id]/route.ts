@@ -7,9 +7,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   const sw = await db.switch.findUnique({
     where: { id },
-    include: { nextSwitch: { select: { id: true, name: true, ipAddress: true, snmpVersion: true } }, prevSwitches: { select: { id: true, name: true, ipAddress: true } }, ports: { orderBy: { ifIndex: "asc" } } },
+    include: { nextSwitch: { select: { id: true, name: true, ipAddress: true, snmpVersion: true } }, prevSwitches: { select: { id: true, name: true, ipAddress: true } } },
   });
   if (!sw) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Don't include ports (has BigInt fields that crash JSON.stringify)
   return NextResponse.json(sw);
 }
 

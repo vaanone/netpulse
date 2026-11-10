@@ -4065,10 +4065,13 @@ function SwitchDetailDialog(props: {
               onEdit(detailRowQ.data);
             } else {
               // Data not loaded yet — fetch it manually then open edit
-              fetch(`/api/switches/${sw?.switchId}`)
-                .then(r => r.json())
+              fetch(`/api/switches/${sw?.switchId}`, { cache: "no-store" })
+                .then(r => {
+                  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                  return r.json();
+                })
                 .then(data => onEdit(data))
-                .catch(() => toast.error("Failed to load switch data for edit"));
+                .catch((e) => toast.error("Failed to load switch data: " + e.message));
             }
           }, 300);
         }}
