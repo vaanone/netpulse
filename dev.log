@@ -21,3 +21,4 @@ $ next dev -H 0.0.0.0 -p 3000
  GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 14ms (compile: 6ms, render: 9ms)
  GET /api/companies 200 in 11ms (compile: 7ms, render: 5ms)
  GET /api/rings 200 in 5ms (compile: 1316µs, render: 3ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 9ms (compile: 4ms, render: 5ms)
