@@ -4056,10 +4056,21 @@ function SwitchDetailDialog(props: {
         description={`Confirm changes to "${sw?.name ?? ""}" with the settings password.`}
         confirmLabel="Edit Switch"
         onConfirm={() => {
-          if (detailRowQ.data) {
-            onOpenChange(false);
-            queueMicrotask(() => onEdit(detailRowQ.data));
-          }
+          // Close both dialogs first, then open edit form after a delay
+          // to ensure the dialogs are fully unmounted before the edit form opens
+          setEditGate(false);
+          onOpenChange(false);
+          setTimeout(() => {
+            if (detailRowQ.data) {
+              onEdit(detailRowQ.data);
+            } else {
+              // Data not loaded yet — fetch it manually then open edit
+              fetch(`/api/switches/${sw?.switchId}`)
+                .then(r => r.json())
+                .then(data => onEdit(data))
+                .catch(() => toast.error("Failed to load switch data for edit"));
+            }
+          }, 300);
         }}
       />
 
