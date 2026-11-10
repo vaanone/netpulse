@@ -3489,7 +3489,8 @@ function SwitchDetailDialog(props: {
   const { sw, onOpenChange, onSwitchClick, onEdit } = props;
   const queryClient = useQueryClient();
   const [deleteGate, setDeleteGate] = React.useState(false);
-  const [editingRow, setEditingRow] = React.useState<SwitchRow | null>(null);
+  const [editGate, setEditGate] = React.useState(false);
+  const [pollingSwitch, setPollingSwitch] = React.useState(false);
 
   // Fetch full switch row (for edit)
   const detailRowQ = useQuery<SwitchRow>({
@@ -4004,13 +4005,30 @@ function SwitchDetailDialog(props: {
 
         <DialogFooter className="gap-2">
           <Button
-            variant="default"
-            onClick={() => {
-              if (detailRowQ.data) {
-                onOpenChange(false);
-                queueMicrotask(() => onEdit(detailRowQ.data));
-              }
+            variant="outline"
+            size="sm"
+            disabled={pollingSwitch}
+            onClick={async () => {
+              setPollingSwitch(true);
+              try {
+                const r = await fetch("/api/poll", { method: "POST" });
+                if (r.ok) {
+                  toast.success("Fresh data polled");
+                  queryClient.invalidateQueries({ queryKey: ["metrics"] });
+                  queryClient.invalidateQueries({ queryKey: ["switch", sw?.switchId] });
+                  queryClient.invalidateQueries({ queryKey: ["switch-alerts", sw?.switchId] });
+                }
+              } catch { toast.error("Poll failed"); }
+              setPollingSwitch(false);
             }}
+            className="gap-1.5"
+          >
+            <RefreshCw className={cn("size-3.5", pollingSwitch && "animate-spin")} />
+            Refresh
+          </Button>
+          <Button
+            variant="default"
+            onClick={() => setEditGate(true)}
             className="gap-1.5"
           >
             <Pencil className="size-3.5" />
@@ -4029,6 +4047,21 @@ function SwitchDetailDialog(props: {
           </DialogClose>
         </DialogFooter>
       </DialogContent>
+
+      {/* Edit password gate */}
+      <DestructiveGateDialog
+        open={editGate}
+        onOpenChange={setEditGate}
+        title="Edit Switch"
+        description={`Confirm changes to "${sw?.name ?? ""}" with the settings password.`}
+        confirmLabel="Edit Switch"
+        onConfirm={() => {
+          if (detailRowQ.data) {
+            onOpenChange(false);
+            queueMicrotask(() => onEdit(detailRowQ.data));
+          }
+        }}
+      />
 
       <DestructiveGateDialog
         open={deleteGate}
