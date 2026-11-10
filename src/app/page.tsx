@@ -731,6 +731,10 @@ export default function Home() {
         <SearchSwitch
           switches={switches}
           onSwitchClick={(id) => setDetailSwitchId(id)}
+          onPollSwitch={async () => {
+            await pollMut.mutateAsync();
+            queryClient.invalidateQueries({ queryKey: ["metrics"] });
+          }}
         />
         )}
 
@@ -1471,9 +1475,11 @@ function RingDiagram(props: {
 function SearchSwitch(props: {
   switches: SwitchSnapshot[];
   onSwitchClick: (id: string) => void;
+  onPollSwitch: (id: string) => void;
 }) {
-  const { switches, onSwitchClick } = props;
+  const { switches, onSwitchClick, onPollSwitch } = props;
   const [query, setQuery] = React.useState("");
+  const [pollingId, setPollingId] = React.useState<string | null>(null);
 
   const results = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1520,26 +1526,42 @@ function SearchSwitch(props: {
             {results.length === 0 ? (
               <div className="text-sm text-muted-foreground py-4 text-center">No matches for “{query}”.</div>
             ) : (
-              <ScrollArea className="max-h-72">
+              <ScrollArea className="max-h-[600px]">
                 <div className="space-y-1.5 pr-2">
                   {results.map((sw) => (
-                    <button
-                      key={sw.switchId}
-                      onClick={() => onSwitchClick(sw.switchId)}
-                      className="w-full text-left flex items-center gap-3 p-2.5 rounded-lg border border-border/60 hover:bg-accent/40 hover:border-primary/30 transition-colors"
-                    >
-                      <span className={cn("size-2 rounded-full shrink-0", statusDot(sw.status))} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{highlightMatch(sw.name, query)}</div>
-                        <div className="text-xs text-muted-foreground font-mono truncate">{highlightMatch(sw.ipAddress, query)}</div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <Badge variant="outline" className="text-[10px]">SNMP {snmpVersionLabel(sw.snmpVersion)}</Badge>
-                        <div className="text-[10px] text-muted-foreground mt-1 truncate max-w-[140px]">
-                          {sw.ringLabel ?? sw.ringName ?? "Unassigned"}
+                    <div key={sw.switchId} className="w-full text-left flex items-center gap-2 p-2.5 rounded-lg border border-border/60 hover:bg-accent/40 hover:border-primary/30 transition-colors">
+                      <button
+                        onClick={() => onSwitchClick(sw.switchId)}
+                        className="flex-1 text-left flex items-center gap-3 min-w-0"
+                      >
+                        <span className={cn("size-2 rounded-full shrink-0", statusDot(sw.status))} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate">{highlightMatch(sw.name, query)}</div>
+                          <div className="text-xs text-muted-foreground font-mono truncate">{highlightMatch(sw.ipAddress, query)}</div>
                         </div>
-                      </div>
-                    </button>
+                        <div className="text-right shrink-0">
+                          <Badge variant="outline" className="text-[10px]">SNMP {snmpVersionLabel(sw.snmpVersion)}</Badge>
+                          <div className="text-[10px] text-muted-foreground mt-1 truncate max-w-[140px]">
+                            {sw.ringLabel ?? sw.ringName ?? "Unassigned"}
+                          </div>
+                        </div>
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 shrink-0"
+                        disabled={pollingId === sw.switchId}
+                        onClick={async () => {
+                          setPollingId(sw.switchId);
+                          await onPollSwitch(sw.switchId);
+                          setPollingId(null);
+                          onSwitchClick(sw.switchId);
+                        }}
+                        title="Poll fresh data from this switch"
+                      >
+                        <RefreshCw className={cn("size-3.5", pollingId === sw.switchId && "animate-spin")} />
+                      </Button>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>
@@ -1857,7 +1879,7 @@ function SwitchDomCard(props: { sw: SwitchSnapshot; onSwitchClick: (id: string) 
         </button>
         <Badge variant="outline" className="text-[10px] shrink-0">{sfpPorts.length} SFP</Badge>
       </div>
-      <ScrollArea className="max-h-72">
+      <ScrollArea className="max-h-[600px]">
         <div className="p-2 space-y-1.5">
           {sfpPorts.map((p) => (
             <DomPortRow key={p.ifIndex} port={p} />
@@ -4067,7 +4089,7 @@ function RingPortCard({ port }: { port: PortSnapshot }) {
 function PortTable({ ports }: { ports: PortSnapshot[] }) {
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden">
-      <ScrollArea className="max-h-72">
+      <ScrollArea className="max-h-[600px]">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30 sticky top-0">

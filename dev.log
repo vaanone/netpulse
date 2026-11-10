@@ -5,16 +5,12 @@ $ next dev -H 0.0.0.0 -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 602ms
- GET /api/metrics 200 in 328ms (compile: 315ms, render: 13ms)
- GET /api/switches 200 in 359ms (compile: 276ms, render: 83ms)
- GET /api/companies 200 in 363ms (compile: 296ms, render: 67ms)
- GET /api/rings 200 in 375ms (compile: 349ms, render: 25ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 367ms (compile: 217ms, render: 149ms)
- GET / 200 in 1891ms (compile: 1780ms, render: 111ms)
- GET / 200 in 3.2s (compile: 2.8s, render: 340ms)
- GET /api/companies 200 in 12ms (compile: 3ms, render: 9ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 13ms (compile: 6ms, render: 7ms)
- GET /api/metrics 200 in 7ms (compile: 5ms, render: 3ms)
- GET /api/rings 200 in 10ms (compile: 2ms, render: 8ms)
- GET /api/switches 200 in 6ms (compile: 1432µs, render: 4ms)
+✓ Ready in 634ms
+○ Compiling / ...
+ GET / 200 in 3.4s (compile: 3.2s, render: 273ms)
+ GET / 200 in 47ms (compile: 5ms, render: 42ms)
+ GET /api/metrics 200 in 164ms (compile: 157ms, render: 7ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 163ms (compile: 46ms, render: 118ms)
+ GET /api/companies 200 in 173ms (compile: 79ms, render: 95ms)
+ GET /api/switches 200 in 178ms (compile: 127ms, render: 50ms)
+ GET /api/rings 200 in 170ms (compile: 155ms, render: 15ms)
