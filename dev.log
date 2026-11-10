@@ -5,62 +5,19 @@ $ next dev -H 0.0.0.0 -p 3000
 - Environments: .env
 
 ✓ Starting...
-✓ Ready in 634ms
+✓ Ready in 613ms
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 212ms (compile: 181ms, render: 31ms)
 ○ Compiling / ...
- GET / 200 in 3.4s (compile: 3.2s, render: 273ms)
- GET / 200 in 47ms (compile: 5ms, render: 42ms)
- GET /api/metrics 200 in 164ms (compile: 157ms, render: 7ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 163ms (compile: 46ms, render: 118ms)
- GET /api/companies 200 in 173ms (compile: 79ms, render: 95ms)
- GET /api/switches 200 in 178ms (compile: 127ms, render: 50ms)
- GET /api/rings 200 in 170ms (compile: 155ms, render: 15ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 11ms (compile: 3ms, render: 8ms)
- GET /api/metrics 200 in 11ms (compile: 8ms, render: 3ms)
- GET /api/switches 200 in 15ms (compile: 4ms, render: 12ms)
- GET /api/companies 200 in 13ms (compile: 9ms, render: 4ms)
- GET /api/rings 200 in 7ms (compile: 1785µs, render: 5ms)
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
-[snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
-[snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
-[poller] Mum-Core-01: running CLI poll (SSH admin@10.10.1.11:22) — cache empty
-[poller] Mum-Core-01: running CLI poll (SSH admin@10.10.1.11:22) — cache empty
- GET /api/metrics 200 in 5ms (compile: 2ms, render: 3ms)
- GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 8ms (compile: 2ms, render: 6ms)
+ GET /api/metrics 200 in 541ms (compile: 531ms, render: 10ms)
+ GET / 200 in 3.7s (compile: 3.5s, render: 244ms)
+ GET /api/metrics 200 in 25ms (compile: 22ms, render: 3ms)
+ GET /api/companies 200 in 34ms (compile: 24ms, render: 11ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 11ms (compile: 1639µs, render: 10ms)
+ GET /api/switches 200 in 30ms (compile: 24ms, render: 6ms)
+ GET /api/rings 200 in 33ms (compile: 27ms, render: 6ms)
+ GET / 200 in 43ms (compile: 4ms, render: 40ms)
+ GET /api/metrics 200 in 7ms (compile: 4ms, render: 3ms)
+ GET /api/switches 200 in 11ms (compile: 3ms, render: 8ms)
+ GET /api/alerts?acknowledged=false&resolved=false&limit=100 200 in 14ms (compile: 6ms, render: 9ms)
+ GET /api/companies 200 in 11ms (compile: 7ms, render: 5ms)
+ GET /api/rings 200 in 5ms (compile: 1316µs, render: 3ms)

@@ -475,9 +475,11 @@ export default function Home() {
   const queryClient = useQueryClient();
 
   // --- Auto refresh toggle (declared BEFORE queries that use it) ---
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(() => {
-    try { return localStorage.getItem("np-autorefresh") !== "false"; } catch { return true; }
-  });
+  // Use useEffect to load from localStorage after mount (avoids hydration mismatch)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
+  React.useEffect(() => {
+    try { setAutoRefreshEnabled(localStorage.getItem("np-autorefresh") !== "false"); } catch {}
+  }, []);
 
   // --- Queries ---
   const metricsQ = useQuery<MetricsSnapshot>({
@@ -583,9 +585,19 @@ export default function Home() {
   const [allAlertsOpen, setAllAlertsOpen] = React.useState(false);
 
   // --- Header button visibility (persisted) ---
-  const [showJumpTo, setShowJumpTo] = React.useState(() => {
-    try { return localStorage.getItem("np-jumpto") !== "false"; } catch { return true; }
-  });
+  // Use mounted flag to avoid hydration mismatch — localStorage is only
+  // available on the client, so server renders with defaults (true) and
+  // client updates after mount.
+  const [mounted, setMounted] = React.useState(false);
+  const [showJumpTo, setShowJumpTo] = React.useState(true);
+  const [showPollNow, setShowPollNow] = React.useState(true);
+  React.useEffect(() => {
+    setMounted(true);
+    try {
+      setShowJumpTo(localStorage.getItem("np-jumpto") !== "false");
+      setShowPollNow(localStorage.getItem("np-pollnow") !== "false");
+    } catch {}
+  }, []);
   const toggleJumpTo = () => {
     setShowJumpTo(prev => {
       const next = !prev;
@@ -593,9 +605,6 @@ export default function Home() {
       return next;
     });
   };
-  const [showPollNow, setShowPollNow] = React.useState(() => {
-    try { return localStorage.getItem("np-pollnow") !== "false"; } catch { return true; }
-  });
   const togglePollNow = () => {
     setShowPollNow(prev => {
       const next = !prev;
@@ -605,9 +614,10 @@ export default function Home() {
   };
 
   // --- Section visibility (persisted in localStorage) ---
-  const [sectionVisibility, setSectionVisibility] = React.useState<Record<string, boolean>>(() => {
-    try { const s = localStorage.getItem("np-vis"); return s ? JSON.parse(s) : {}; } catch { return {}; }
-  });
+  const [sectionVisibility, setSectionVisibility] = React.useState<Record<string, boolean>>({});
+  React.useEffect(() => {
+    try { const s = localStorage.getItem("np-vis"); if (s) setSectionVisibility(JSON.parse(s)); } catch {}
+  }, []);
   const toggleSection = (id: string) => {
     setSectionVisibility(prev => {
       const next = { ...prev, [id]: prev[id] === false ? true : false };
@@ -618,9 +628,10 @@ export default function Home() {
   const isSectionVisible = (id: string) => sectionVisibility[id] !== false;
 
   // --- Auto poll toggle (persisted) ---
-  const [autoPollEnabled, setAutoPollEnabled] = React.useState(() => {
-    try { return localStorage.getItem("np-autopoll") !== "false"; } catch { return true; }
-  });
+  const [autoPollEnabled, setAutoPollEnabled] = React.useState(true);
+  React.useEffect(() => {
+    try { setAutoPollEnabled(localStorage.getItem("np-autopoll") !== "false"); } catch {}
+  }, []);
   const toggleAutoPoll = () => {
     setAutoPollEnabled(prev => {
       const next = !prev;
