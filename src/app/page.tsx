@@ -1000,10 +1000,6 @@ function Header(props: {
             )}
           </Button>
 
-          <Button variant="outline" size="icon" asChild aria-label="Settings" className="size-9">
-            <Link href="/settings"><Settings className="size-4" /></Link>
-          </Button>
-
           {/* Current user + logout */}
           {user && (
             <DropdownMenu>
