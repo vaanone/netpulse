@@ -97,8 +97,11 @@ export default function LoginPage() {
                   id="username"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder="admin"
-                  autoComplete="username"
+                  placeholder="username"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   autoFocus
                   required
                 />
@@ -113,7 +116,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    autoComplete="current-password"
+                    autoComplete="off"
                     required
                     className="pr-9"
                   />
@@ -138,10 +141,6 @@ export default function LoginPage() {
                 {loading ? "Signing in…" : <>Sign in <ArrowRight className="size-4" /></>}
               </Button>
             </form>
-
-            <div className="text-[11px] text-muted-foreground text-center pt-1 border-t border-border/40">
-              Default admin: <code className="font-mono bg-muted px-1.5 py-0.5 rounded">admin</code> / <code className="font-mono bg-muted px-1.5 py-0.5 rounded">Hipoint@123</code>
-            </div>
           </CardContent>
         </Card>
 

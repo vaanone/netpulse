@@ -14,7 +14,10 @@ import { NextResponse, NextRequest } from "next/server";
 import { db } from "@/lib/db";
 
 export const SESSION_COOKIE_NAME = "np_session";
-const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7 days (seconds)
+// The session cookie has no maxAge (session-scoped — cleared on browser close,
+// so the password is re-entered every browser session). The token below still
+// carries an exp as a safety cap for the rare case a cookie value leaks.
+export const SESSION_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function getSecret(): string {
   const s = process.env.SESSION_SECRET;
@@ -111,7 +114,10 @@ export function setSessionCookie(res: NextResponse, token: string) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: SESSION_MAX_AGE,
+    // No maxAge / expires → a session cookie: the browser holds it in memory
+    // and discards it when the browser closes, so the password must be
+    // re-entered on every new browser session. The password itself is never
+    // stored anywhere — only this signed token (uid/username/role) is.
   });
 }
 

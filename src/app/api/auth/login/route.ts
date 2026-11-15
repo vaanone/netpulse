@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyPassword, createSessionToken, setSessionCookie } from "@/lib/auth";
-
-const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+import { verifyPassword, createSessionToken, setSessionCookie, SESSION_TOKEN_MAX_AGE_MS } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   let body: { username?: string; password?: string };
@@ -26,7 +24,7 @@ export async function POST(req: NextRequest) {
     uid: user.id,
     username: user.username,
     role: user.role as "admin" | "user",
-    exp: Date.now() + SESSION_MAX_AGE_MS,
+    exp: Date.now() + SESSION_TOKEN_MAX_AGE_MS,
   });
 
   const res = NextResponse.json({
