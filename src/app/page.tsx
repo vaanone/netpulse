@@ -15,9 +15,19 @@
  */
 
 import * as React from "react";
+import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import {
+  SETTINGS_PASSWORD as SHARED_SETTINGS_PASSWORD,
+  LS_KEYS,
+  loadSectionVisibility,
+  resolveSectionVisible,
+  loadBoolSetting,
+  saveBoolSetting,
+} from "@/lib/settings";
 import {
   Activity, AlertTriangle, ArrowRight, ArrowUpDown, Bell, BellOff, Building2,
   Cable, ChevronDown, Cpu, Database, Gauge, HardDrive, LayoutGrid, Link2,
@@ -167,7 +177,8 @@ interface AlertRow {
 // Constants
 // ---------------------------------------------------------------------------
 
-const SETTINGS_PASSWORD = "Hipoint@123";
+// Settings password — shared with /settings via @/lib/settings.
+const SETTINGS_PASSWORD = SHARED_SETTINGS_PASSWORD;
 
 const POLL_INTERVAL_LABEL = "Poll interval 30s";
 const AUTO_REFRESH_LABEL = "Auto-refresh 15s";
@@ -478,7 +489,7 @@ export default function Home() {
   // Use useEffect to load from localStorage after mount (avoids hydration mismatch)
   const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
   React.useEffect(() => {
-    try { setAutoRefreshEnabled(localStorage.getItem("np-autorefresh") !== "false"); } catch {}
+    setAutoRefreshEnabled(loadBoolSetting(LS_KEYS.autoRefresh));
   }, []);
 
   // --- Queries ---
@@ -576,13 +587,28 @@ export default function Home() {
 
   // --- UI state ---
   const [soundEnabled, setSoundEnabled] = React.useState(true);
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [settingsMenuOpen, setSettingsMenuOpen] = React.useState(false);
   const [manageCompaniesOpen, setManageCompaniesOpen] = React.useState(false);
   const [switchFormOpen, setSwitchFormOpen] = React.useState(false);
   const [editingSwitch, setEditingSwitch] = React.useState<SwitchRow | null>(null);
   const [detailSwitchId, setDetailSwitchId] = React.useState<string | null>(null);
   const [allAlertsOpen, setAllAlertsOpen] = React.useState(false);
+
+  // Open Manage Companies / Add Switch when arriving from the Settings page
+  // via /?action=manage-companies or /?action=add-switch.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  React.useEffect(() => {
+    const action = searchParams.get("action");
+    if (!action) return;
+    // Clear the query param so it doesn't re-trigger on later navigations.
+    router.replace("/", { scroll: false });
+    if (action === "manage-companies") {
+      setManageCompaniesOpen(true);
+    } else if (action === "add-switch") {
+      setEditingSwitch(null);
+      setSwitchFormOpen(true);
+    }
+  }, [searchParams, router]);
 
   // --- Header button visibility (persisted) ---
   // Use mounted flag to avoid hydration mismatch — localStorage is only
@@ -593,49 +619,41 @@ export default function Home() {
   const [showPollNow, setShowPollNow] = React.useState(true);
   React.useEffect(() => {
     setMounted(true);
-    try {
-      setShowJumpTo(localStorage.getItem("np-jumpto") !== "false");
-      setShowPollNow(localStorage.getItem("np-pollnow") !== "false");
-    } catch {}
+    setShowJumpTo(loadBoolSetting(LS_KEYS.jumpTo));
+    setShowPollNow(loadBoolSetting(LS_KEYS.pollNow));
   }, []);
   const toggleJumpTo = () => {
-    setShowJumpTo(prev => {
-      const next = !prev;
-      try { localStorage.setItem("np-jumpto", String(next)); } catch {}
-      return next;
-    });
+    setShowJumpTo(prev => { const next = !prev; saveBoolSetting(LS_KEYS.jumpTo, next); return next; });
   };
   const togglePollNow = () => {
-    setShowPollNow(prev => {
-      const next = !prev;
-      try { localStorage.setItem("np-pollnow", String(next)); } catch {}
-      return next;
-    });
+    setShowPollNow(prev => { const next = !prev; saveBoolSetting(LS_KEYS.pollNow, next); return next; });
   };
 
-  // --- Section visibility (persisted in localStorage) ---
+  // --- Section visibility (persisted in localStorage; defaults hide the
+  // four detail sections until enabled from the Settings page) ---
   const [sectionVisibility, setSectionVisibility] = React.useState<Record<string, boolean>>({});
   React.useEffect(() => {
-    try { const s = localStorage.getItem("np-vis"); if (s) setSectionVisibility(JSON.parse(s)); } catch {}
+    setSectionVisibility(loadSectionVisibility());
   }, []);
   const toggleSection = (id: string) => {
     setSectionVisibility(prev => {
-      const next = { ...prev, [id]: prev[id] === false ? true : false };
-      try { localStorage.setItem("np-vis", JSON.stringify(next)); } catch {}
+      const current = resolveSectionVisible(prev, id);
+      const next = { ...prev, [id]: !current };
+      try { localStorage.setItem(LS_KEYS.sectionVisibility, JSON.stringify(next)); } catch {}
       return next;
     });
   };
-  const isSectionVisible = (id: string) => sectionVisibility[id] !== false;
+  const isSectionVisible = (id: string) => resolveSectionVisible(sectionVisibility, id);
 
   // --- Auto poll toggle (persisted) ---
   const [autoPollEnabled, setAutoPollEnabled] = React.useState(true);
   React.useEffect(() => {
-    try { setAutoPollEnabled(localStorage.getItem("np-autopoll") !== "false"); } catch {}
+    setAutoPollEnabled(loadBoolSetting(LS_KEYS.autoPoll));
   }, []);
   const toggleAutoPoll = () => {
     setAutoPollEnabled(prev => {
       const next = !prev;
-      try { localStorage.setItem("np-autopoll", String(next)); } catch {}
+      saveBoolSetting(LS_KEYS.autoPoll, next);
       if (next) fetch("/api/poll", { method: "POST" }).catch(() => {});
       return next;
     });
@@ -645,7 +663,7 @@ export default function Home() {
   const toggleAutoRefresh = () => {
     setAutoRefreshEnabled(prev => {
       const next = !prev;
-      try { localStorage.setItem("np-autorefresh", String(next)); } catch {}
+      saveBoolSetting(LS_KEYS.autoRefresh, next);
       return next;
     });
   };
@@ -707,7 +725,6 @@ export default function Home() {
         unackCount={activeAlertsCount}
         alertsBadgeClass={alertsBadgeClass}
         onOpenAlerts={() => { setShowAllAlerts(true); setAllAlertsOpen(true); }}
-        onOpenSettings={() => setSettingsOpen(true)}
         onPollNow={() => pollMut.mutate()}
         polling={pollMut.isPending}
         showJumpTo={showJumpTo}
@@ -819,38 +836,6 @@ export default function Home() {
       {/* =========================================================
           DIALOGS
       ========================================================== */}
-      <SettingsGateDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        onUnlock={() => {
-          setSettingsOpen(false);
-          queueMicrotask(() => setSettingsMenuOpen(true));
-        }}
-      />
-
-      <SettingsMenuDialog
-        open={settingsMenuOpen}
-        onOpenChange={setSettingsMenuOpen}
-        onManageCompanies={() => {
-          setSettingsMenuOpen(false);
-          queueMicrotask(() => setManageCompaniesOpen(true));
-        }}
-        onAddSwitch={() => {
-          setSettingsMenuOpen(false);
-          queueMicrotask(() => { setEditingSwitch(null); setSwitchFormOpen(true); });
-        }}
-        sectionVisibility={sectionVisibility}
-        onToggleSection={toggleSection}
-        autoPollEnabled={autoPollEnabled}
-        onToggleAutoPoll={toggleAutoPoll}
-        autoRefreshEnabled={autoRefreshEnabled}
-        onToggleAutoRefresh={toggleAutoRefresh}
-        showJumpTo={showJumpTo}
-        onToggleJumpTo={toggleJumpTo}
-        showPollNow={showPollNow}
-        onTogglePollNow={togglePollNow}
-      />
-
       <ManageCompaniesDialog
         open={manageCompaniesOpen}
         onOpenChange={setManageCompaniesOpen}
@@ -910,13 +895,12 @@ function Header(props: {
   unackCount: number;
   alertsBadgeClass: string;
   onOpenAlerts: () => void;
-  onOpenSettings: () => void;
   onPollNow: () => void;
   polling: boolean;
   showJumpTo: boolean;
   showPollNow: boolean;
 }) {
-  const { soundEnabled, onToggleSound, unackCount, alertsBadgeClass, onOpenAlerts, onOpenSettings, onPollNow, polling, showJumpTo, showPollNow } = props;
+  const { soundEnabled, onToggleSound, unackCount, alertsBadgeClass, onOpenAlerts, onPollNow, polling, showJumpTo, showPollNow } = props;
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-panel/95 backdrop-blur supports-[backdrop-filter]:bg-panel/80">
       <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6 h-14 sm:h-16 flex items-center gap-3">
@@ -981,8 +965,8 @@ function Header(props: {
             )}
           </Button>
 
-          <Button variant="outline" size="icon" onClick={onOpenSettings} aria-label="Settings" className="size-9">
-            <Settings className="size-4" />
+          <Button variant="outline" size="icon" asChild aria-label="Settings" className="size-9">
+            <Link href="/settings"><Settings className="size-4" /></Link>
           </Button>
         </div>
       </div>
