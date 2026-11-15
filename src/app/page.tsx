@@ -3604,7 +3604,7 @@ function SwitchDetailDialog(props: {
 
   return (
     <Dialog open={!!sw} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-4xl max-h-[92vh] overflow-hidden flex flex-col" showCloseButton={false}>
         {/* Header */}
         <DialogHeader>
           <div className="flex items-start justify-between gap-3">
@@ -3623,18 +3623,6 @@ function SwitchDetailDialog(props: {
                   {sw.companyName && <Badge variant="outline" className="text-[10px]">{sw.companyName}</Badge>}
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {detailRowQ.data && (
-                <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => { setEditingRow(detailRowQ.data); onEdit(detailRowQ.data); }}>
-                  <Pencil className="size-3.5" /> Edit
-                </Button>
-              )}
-              {detailRowQ.data && (
-                <Button variant="outline" size="sm" className="gap-1.5 h-8 text-crit hover:text-crit" onClick={() => setDeleteGate(true)}>
-                  <Trash2 className="size-3.5" /> Delete
-                </Button>
-              )}
             </div>
           </div>
         </DialogHeader>
