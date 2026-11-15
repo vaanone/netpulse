@@ -1,7 +1,28 @@
 import { db } from "@/lib/db";
 import { startPolling } from "@/lib/poller";
+import { hashPassword } from "@/lib/auth";
+
+// Idempotently ensure a default admin user exists (admin / Hipoint@123).
+// Safe to call on every boot — only creates if the username is missing.
+async function ensureDefaultAdmin() {
+  const exists = await db.user.findUnique({ where: { username: "admin" } });
+  if (exists) return;
+  try {
+    await db.user.create({
+      data: {
+        username: "admin",
+        passwordHash: hashPassword("Hipoint@123"),
+        role: "admin",
+      },
+    });
+    console.log("[seed] Created default admin user (admin / Hipoint@123).");
+  } catch (err: any) {
+    if (err?.code !== "P2002") console.error("[seed] admin user error:", err);
+  }
+}
 
 export async function ensureSeedSwitches() {
+  await ensureDefaultAdmin();
   const count = await db.switch.count();
   if (count > 0) { startPolling(); return; }
   try {

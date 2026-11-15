@@ -39,7 +39,7 @@ import {
   Hash, Microchip, Thermometer, Filter, ArrowDownUp, SortDesc, SortAsc,
   ExternalLink, Hourglass, MonitorDot, Network as NetworkIcon, Router,
   CircleDot, Map as MapIcon, Building, Radio, FolderTree, Boxes, Workflow,
-  Terminal,
+  Terminal, LogOut, CircleUser,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -172,6 +172,19 @@ interface AlertRow {
   acknowledged: boolean; resolved: boolean; timestamp: string; resolvedAt?: string | null;
   switch?: { name: string; ipAddress: string } | null;
 }
+
+// ---------------------------------------------------------------------------
+// Current-user context — lets deep components (switch list, detail dialog,
+// search) read the logged-in user's role without prop drilling. Hidden admin
+// controls stay hidden on the server render and the first client render
+// (user is null until /api/auth/me resolves in useEffect), so there is no
+// hydration mismatch.
+interface CurrentUser { id: string; username: string; role: "admin" | "user"; }
+const UserContext = React.createContext<{ user: CurrentUser | null; isAdmin: boolean }>({
+  user: null,
+  isAdmin: false,
+});
+function useCurrentUser() { return React.useContext(UserContext); }
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -593,6 +606,16 @@ export default function Home() {
   const [detailSwitchId, setDetailSwitchId] = React.useState<string | null>(null);
   const [allAlertsOpen, setAllAlertsOpen] = React.useState(false);
 
+  // --- Current logged-in user (fetched after mount to avoid hydration issues) ---
+  const [currentUser, setCurrentUser] = React.useState<CurrentUser | null>(null);
+  React.useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null))
+      .then(u => setCurrentUser(u))
+      .catch(() => setCurrentUser(null));
+  }, []);
+  const isAdmin = currentUser?.role === "admin";
+
   // Open Manage Companies / Add Switch when arriving from the Settings page
   // via /?action=manage-companies or /?action=add-switch.
   const searchParams = useSearchParams();
@@ -715,6 +738,7 @@ export default function Home() {
   const editingSwitchRow = editingSwitch ? (switchesQ.data?.find(s => s.id === editingSwitch.id) ?? editingSwitch) : null;
 
   return (
+    <UserContext.Provider value={{ user: currentUser, isAdmin }}>
     <div className="bg-grid min-h-screen flex flex-col text-foreground">
       {/* =========================================================
           HEADER
@@ -882,6 +906,7 @@ export default function Home() {
         onSwitchClick={(id) => { setAllAlertsOpen(false); queueMicrotask(() => setDetailSwitchId(id)); }}
       />
     </div>
+    </UserContext.Provider>
   );
 }
 
@@ -901,6 +926,15 @@ function Header(props: {
   showPollNow: boolean;
 }) {
   const { soundEnabled, onToggleSound, unackCount, alertsBadgeClass, onOpenAlerts, onPollNow, polling, showJumpTo, showPollNow } = props;
+  const { user, isAdmin } = useCurrentUser();
+  const [loggingOut, setLoggingOut] = React.useState(false);
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {}
+    window.location.href = "/login";
+  }
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-panel/95 backdrop-blur supports-[backdrop-filter]:bg-panel/80">
       <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6 h-14 sm:h-16 flex items-center gap-3">
@@ -944,7 +978,8 @@ function Header(props: {
 
         {/* Right actions */}
         <div className="flex items-center gap-2">
-          {showPollNow && (
+          {/* Poll Now is admin-only — it forces an SSH/SNMP poll cycle */}
+          {showPollNow && isAdmin && (
           <Button variant="outline" size="sm" onClick={onPollNow} disabled={polling} className="gap-1.5">
             <RefreshCw className={cn("size-3.5", polling && "animate-spin")} />
             <span className="hidden sm:inline">Poll Now</span>
@@ -968,6 +1003,34 @@ function Header(props: {
           <Button variant="outline" size="icon" asChild aria-label="Settings" className="size-9">
             <Link href="/settings"><Settings className="size-4" /></Link>
           </Button>
+
+          {/* Current user + logout */}
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 h-9">
+                  <CircleUser className="size-3.5" />
+                  <span className="hidden sm:inline max-w-[120px] truncate">{user.username}</span>
+                  <Badge variant={isAdmin ? "default" : "secondary"} className="text-[9px] px-1.5 py-0 h-4">{isAdmin ? "ADMIN" : "VIEW"}</Badge>
+                  <ChevronDown className="size-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuLabel className="text-xs">
+                  <div className="font-medium">{user.username}</div>
+                  <div className="text-muted-foreground">{isAdmin ? "Administrator — full access" : "View-only user"}</div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" className="gap-2 cursor-pointer"><Settings className="size-3.5" /> Settings</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} disabled={loggingOut} className="gap-2 cursor-pointer text-destructive focus:text-destructive">
+                  <LogOut className="size-3.5" /> {loggingOut ? "Signing out…" : "Sign out"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
     </header>
@@ -1473,6 +1536,7 @@ function SearchSwitch(props: {
   onPollSwitch: (id: string) => void;
 }) {
   const { switches, onSwitchClick, onPollSwitch } = props;
+  const { isAdmin } = useCurrentUser();
   const [query, setQuery] = React.useState("");
   const [pollingId, setPollingId] = React.useState<string | null>(null);
 
@@ -1541,21 +1605,23 @@ function SearchSwitch(props: {
                           </div>
                         </div>
                       </button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 shrink-0"
-                        disabled={pollingId === sw.switchId}
-                        onClick={async () => {
-                          setPollingId(sw.switchId);
-                          await onPollSwitch(sw.switchId);
-                          setPollingId(null);
-                          onSwitchClick(sw.switchId);
-                        }}
-                        title="Poll fresh data from this switch"
-                      >
-                        <RefreshCw className={cn("size-3.5", pollingId === sw.switchId && "animate-spin")} />
-                      </Button>
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 shrink-0"
+                          disabled={pollingId === sw.switchId}
+                          onClick={async () => {
+                            setPollingId(sw.switchId);
+                            await onPollSwitch(sw.switchId);
+                            setPollingId(null);
+                            onSwitchClick(sw.switchId);
+                          }}
+                          title="Poll fresh data from this switch"
+                        >
+                          <RefreshCw className={cn("size-3.5", pollingId === sw.switchId && "animate-spin")} />
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2085,6 +2151,7 @@ function SwitchesList(props: {
 }
 
 function SwitchListItem({ sw, onClick, onEdit }: { sw: SwitchSnapshot; onClick: () => void; onEdit?: () => void }) {
+  const { isAdmin } = useCurrentUser();
   return (
     <div className="flex items-center gap-2">
       <button
@@ -2112,7 +2179,7 @@ function SwitchListItem({ sw, onClick, onEdit }: { sw: SwitchSnapshot; onClick: 
           )}
         </div>
       </button>
-      {onEdit && (
+      {onEdit && isAdmin && (
         <Button
           variant="ghost"
           size="sm"
@@ -3472,6 +3539,7 @@ function SwitchDetailDialog(props: {
 }) {
   const { sw, onOpenChange, onSwitchClick, onEdit } = props;
   const queryClient = useQueryClient();
+  const { isAdmin } = useCurrentUser();
   const [deleteGate, setDeleteGate] = React.useState(false);
   const [editGate, setEditGate] = React.useState(false);
   const [pollingSwitch, setPollingSwitch] = React.useState(false);
@@ -3988,44 +4056,53 @@ function SwitchDetailDialog(props: {
         </div>
 
         <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pollingSwitch}
-            onClick={async () => {
-              setPollingSwitch(true);
-              try {
-                const r = await fetch("/api/poll", { method: "POST" });
-                if (r.ok) {
-                  toast.success("Fresh data polled");
-                  queryClient.invalidateQueries({ queryKey: ["metrics"] });
-                  queryClient.invalidateQueries({ queryKey: ["switch", sw?.switchId] });
-                  queryClient.invalidateQueries({ queryKey: ["switch-alerts", sw?.switchId] });
-                }
-              } catch { toast.error("Poll failed"); }
-              setPollingSwitch(false);
-            }}
-            className="gap-1.5"
-          >
-            <RefreshCw className={cn("size-3.5", pollingSwitch && "animate-spin")} />
-            Refresh
-          </Button>
-          <Button
-            variant="default"
-            onClick={() => setEditGate(true)}
-            className="gap-1.5"
-          >
-            <Pencil className="size-3.5" />
-            Edit Switch
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => setDeleteGate(true)}
-            className="gap-1.5"
-          >
-            <Trash2 className="size-3.5" />
-            Delete Switch
-          </Button>
+          {isAdmin && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pollingSwitch}
+                onClick={async () => {
+                  setPollingSwitch(true);
+                  try {
+                    const r = await fetch("/api/poll", { method: "POST" });
+                    if (r.ok) {
+                      toast.success("Fresh data polled");
+                      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+                      queryClient.invalidateQueries({ queryKey: ["switch", sw?.switchId] });
+                      queryClient.invalidateQueries({ queryKey: ["switch-alerts", sw?.switchId] });
+                    }
+                  } catch { toast.error("Poll failed"); }
+                  setPollingSwitch(false);
+                }}
+                className="gap-1.5"
+              >
+                <RefreshCw className={cn("size-3.5", pollingSwitch && "animate-spin")} />
+                Refresh
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => setEditGate(true)}
+                className="gap-1.5"
+              >
+                <Pencil className="size-3.5" />
+                Edit Switch
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => setDeleteGate(true)}
+                className="gap-1.5"
+              >
+                <Trash2 className="size-3.5" />
+                Delete Switch
+              </Button>
+            </>
+          )}
+          {!isAdmin && (
+            <div className="text-[11px] text-muted-foreground mr-auto">
+              View-only account — editing is restricted to administrators.
+            </div>
+          )}
           <DialogClose asChild>
             <Button variant="outline">Close</Button>
           </DialogClose>

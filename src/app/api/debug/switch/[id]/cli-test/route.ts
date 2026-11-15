@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { pollSwitchViaSsh } from "@/lib/cli-poll";
+import { requireAdmin } from "@/lib/auth";
 
 // GET /api/debug/switch/<id>/cli-test
 // Logs into the switch via SSH or Telnet (whichever is configured), runs all
@@ -8,6 +9,8 @@ import { pollSwitchViaSsh } from "@/lib/cli-poll";
 // Useful for figuring out which CLI commands work on your specific switch.
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   const sw = await db.switch.findUnique({ where: { id } });
   if (!sw) return NextResponse.json({ error: "Switch not found" }, { status: 404 });

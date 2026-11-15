@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { startPolling } from "@/lib/poller";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET() {
   const switches = await db.switch.findMany({
@@ -14,6 +15,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
   const body = await req.json();
   if (!body.name || !body.ipAddress) return NextResponse.json({ error: "name and ipAddress are required" }, { status: 400 });
   if (![1, 2, 3].includes(Number(body.snmpVersion))) return NextResponse.json({ error: "snmpVersion must be 1, 2, or 3" }, { status: 400 });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/auth";
 
 interface RouteParams { params: Promise<{ id: string }>; }
 
@@ -15,6 +16,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   const body = await req.json();
   const nextId = body.nextSwitchId || null;
@@ -62,6 +65,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   
   // Get the switch we're deleting and its predecessor (the switch pointing to it)

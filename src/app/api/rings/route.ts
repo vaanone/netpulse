@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/auth";
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const companyId = url.searchParams.get("companyId");
@@ -7,6 +8,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(rings);
 }
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
   const body = await req.json();
   if (!body.name || !body.companyId) return NextResponse.json({ error: "name and companyId are required" }, { status: 400 });
   const existing = await db.ring.findUnique({ where: { name: body.name } });

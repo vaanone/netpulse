@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/auth";
 export async function GET() {
   const companies = await db.company.findMany({ orderBy: { name: "asc" }, include: { rings: { orderBy: { name: "asc" }, include: { _count: { select: { switches: true } } } } } });
   return NextResponse.json(companies);
 }
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
   const body = await req.json();
   if (!body.name) return NextResponse.json({ error: "name is required" }, { status: 400 });
   const existing = await db.company.findUnique({ where: { name: body.name } });

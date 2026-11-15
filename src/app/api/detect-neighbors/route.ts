@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { pollSwitch } from "@/lib/snmp";
 import { pollSwitchViaSsh } from "@/lib/cli-poll";
+import { requireAdmin } from "@/lib/auth";
 
 // POST /api/detect-neighbors
 // Body: { name, ipAddress, snmpVersion, community?, snmpPort?, v3...,
@@ -13,6 +14,8 @@ import { pollSwitchViaSsh } from "@/lib/cli-poll";
 // Tries SNMP first, falls back to SSH/Telnet if SNMP returns no neighbors.
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
   const body = await req.json();
 
   if (!body.ipAddress) {

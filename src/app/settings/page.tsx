@@ -3,16 +3,16 @@
 /**
  * NETPULSE — Settings page
  *
- * Houses all dashboard preferences behind a password gate:
+ * Behind the login (enforced by middleware), this page holds:
  *   • Automation (Auto Poll, Auto Refresh)
- *   • Dashboard section visibility (the four detail sections are hidden by
- *     default and can be enabled here)
+ *   • Dashboard section visibility (four detail sections hidden by default)
  *   • Header buttons (Jump To, Poll Now)
- *   • Shortcuts to Manage Companies and Add Switch (which open on the home
- *     page via a ?action= query parameter)
+ *   • User Management — admin only: create users, change passwords, change
+ *     roles, delete users
+ *   • Network management shortcuts (admin only): Manage Companies, Add Switch
  *
- * All toggles persist to localStorage using the same keys the home page reads,
- * so changes are reflected on `/` the moment you navigate back.
+ * Toggles persist to localStorage (shared keys with the home page). User
+ * management talks to /api/users which is admin-gated server-side.
  */
 
 import * as React from "react";
@@ -20,30 +20,51 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Building2, Plus, ShieldCheck, Lock, Settings as SettingsIcon,
-  Cpu, RefreshCw, Crosshair, LayoutGrid, Eye, EyeOff, AlertCircle,
+  RefreshCw, Crosshair, LayoutGrid, LogOut, CircleUser, Trash2, KeyRound,
+  UserPlus, Users as UsersIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  SETTINGS_PASSWORD, LS_KEYS, TOGGLE_SECTIONS, loadSectionVisibility,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  DialogFooter, DialogClose,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  LS_KEYS, TOGGLE_SECTIONS, loadSectionVisibility,
   resolveSectionVisible, loadBoolSetting, saveBoolSetting,
 } from "@/lib/settings";
 
+interface CurrentUser { id: string; username: string; role: "admin" | "user"; }
+interface UserRow { id: string; username: string; role: string; createdAt: string; }
+
 export default function SettingsPage() {
   const router = useRouter();
-  const [unlocked, setUnlocked] = React.useState(false);
 
-  // Hydration-safe: start with defaults, load real values after mount.
+  // --- Current user (middleware guarantees a session, but we need the role) ---
+  const [me, setMe] = React.useState<CurrentUser | null>(null);
+  const [loadingMe, setLoadingMe] = React.useState(true);
+  React.useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null))
+      .then(u => { setMe(u); setLoadingMe(false); if (!u) router.replace("/login"); })
+      .catch(() => { setLoadingMe(false); router.replace("/login"); });
+  }, [router]);
+  const isAdmin = me?.role === "admin";
+
+  // --- Hydration-safe toggle state (loaded from localStorage after mount) ---
   const [sectionVisibility, setSectionVisibility] = React.useState<Record<string, boolean>>({});
   const [autoPoll, setAutoPoll] = React.useState(true);
   const [autoRefresh, setAutoRefresh] = React.useState(true);
   const [showJumpTo, setShowJumpTo] = React.useState(true);
   const [showPollNow, setShowPollNow] = React.useState(true);
-
   React.useEffect(() => {
     setSectionVisibility(loadSectionVisibility());
     setAutoPoll(loadBoolSetting(LS_KEYS.autoPoll));
@@ -60,7 +81,6 @@ export default function SettingsPage() {
       return next;
     });
   }
-
   function toggleAutoPoll() {
     setAutoPoll(prev => { const n = !prev; saveBoolSetting(LS_KEYS.autoPoll, n); return n; });
   }
@@ -74,8 +94,17 @@ export default function SettingsPage() {
     setShowPollNow(prev => { const n = !prev; saveBoolSetting(LS_KEYS.pollNow, n); return n; });
   }
 
-  if (!unlocked) {
-    return <PasswordGate onUnlock={() => setUnlocked(true)} />;
+  async function handleLogout() {
+    try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
+    window.location.href = "/login";
+  }
+
+  if (loadingMe || !me) {
+    return (
+      <div className="bg-grid min-h-screen flex items-center justify-center text-foreground">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
   }
 
   return (
@@ -92,8 +121,20 @@ export default function SettingsPage() {
             </span>
             <div className="min-w-0">
               <div className="font-bold text-base sm:text-lg tracking-wider leading-none">SETTINGS</div>
-              <div className="text-[10px] sm:text-xs text-muted-foreground tracking-wide truncate">Dashboard preferences &amp; layout</div>
+              <div className="text-[10px] sm:text-xs text-muted-foreground tracking-wide truncate">Dashboard preferences &amp; user management</div>
             </div>
+          </div>
+          <div className="flex-1" />
+          {/* Current user chip + logout */}
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 h-9 rounded-md border border-border/60">
+              <CircleUser className="size-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium max-w-[120px] truncate">{me.username}</span>
+              <Badge variant={isAdmin ? "default" : "secondary"} className="text-[9px] px-1.5 py-0 h-4">{isAdmin ? "ADMIN" : "VIEW"}</Badge>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1.5">
+              <LogOut className="size-3.5" /> <span className="hidden sm:inline">Sign out</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -104,23 +145,14 @@ export default function SettingsPage() {
           <ShieldCheck className="size-4 text-primary shrink-0 mt-0.5" />
           <div>
             Toggle sections on or off here, then return to the dashboard to see the change. Ring Traffic, Switch Health, SFP DOM and All Interfaces are <span className="text-foreground font-medium">hidden by default</span> — enable them below when you need them.
+            {!isAdmin && <span className="block mt-1">You are signed in as a view-only user. User management and network changes are restricted to administrators.</span>}
           </div>
         </div>
 
         {/* Automation */}
         <SettingsCard title="Automation" icon={<RefreshCw className="size-4" />}>
-          <ToggleRow
-            label="Auto Poll"
-            description="Automatically poll switches every 30 seconds"
-            on={autoPoll}
-            onToggle={toggleAutoPoll}
-          />
-          <ToggleRow
-            label="Auto Refresh"
-            description="Refresh dashboard data every 15 seconds"
-            on={autoRefresh}
-            onToggle={toggleAutoRefresh}
-          />
+          <ToggleRow label="Auto Poll" description="Automatically poll switches every 30 seconds" on={autoPoll} onToggle={toggleAutoPoll} />
+          <ToggleRow label="Auto Refresh" description="Refresh dashboard data every 15 seconds" on={autoRefresh} onToggle={toggleAutoRefresh} />
         </SettingsCard>
 
         {/* Dashboard sections */}
@@ -153,130 +185,273 @@ export default function SettingsPage() {
         {/* Header buttons */}
         <SettingsCard title="Header Buttons" icon={<Crosshair className="size-4" />}>
           <ToggleRow label="Jump To" description="Show the Jump To dropdown in the header" on={showJumpTo} onToggle={toggleJumpTo} />
-          <ToggleRow label="Poll Now" description="Show the Poll Now button in the header" on={showPollNow} onToggle={togglePollNow} />
+          <ToggleRow label="Poll Now" description="Show the Poll Now button in the header (admin only)" on={showPollNow} onToggle={togglePollNow} />
         </SettingsCard>
 
-        {/* Network management shortcuts */}
-        <SettingsCard title="Network Management" icon={<Building2 className="size-4" />}>
-          <div className="text-[11px] text-muted-foreground -mt-1 mb-2">
-            These open on the dashboard.
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="default" className="gap-1.5" onClick={() => router.push("/?action=manage-companies")}>
-              <Building2 className="size-4" /> Manage Companies
-            </Button>
-            <Button variant="default" className="gap-1.5" onClick={() => router.push("/?action=add-switch")}>
-              <Plus className="size-4" /> Add Switch
-            </Button>
-            <Button variant="outline" className="gap-1.5" asChild>
-              <Link href="/"><LayoutGrid className="size-4" /> Back to Dashboard</Link>
-            </Button>
-          </div>
-        </SettingsCard>
+        {/* User management — admin only */}
+        {isAdmin && <UserManagement currentUser={me} />}
 
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground pt-1">
-          <Lock className="size-3.5" />
-          Settings are protected by the settings password.
+        {/* Network management shortcuts — admin only */}
+        {isAdmin && (
+          <SettingsCard title="Network Management" icon={<Building2 className="size-4" />}>
+            <div className="text-[11px] text-muted-foreground -mt-1 mb-2">
+              These open on the dashboard.
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="default" className="gap-1.5" onClick={() => router.push("/?action=manage-companies")}>
+                <Building2 className="size-4" /> Manage Companies
+              </Button>
+              <Button variant="default" className="gap-1.5" onClick={() => router.push("/?action=add-switch")}>
+                <Plus className="size-4" /> Add Switch
+              </Button>
+            </div>
+          </SettingsCard>
+        )}
+
+        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground pt-1">
+          <div className="flex items-center gap-1.5">
+            <Lock className="size-3.5" />
+            Signed in as <span className="text-foreground font-medium">{me.username}</span> ({isAdmin ? "admin" : "view-only"}).
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/"><LayoutGrid className="size-3.5" /> Back to Dashboard</Link>
+          </Button>
         </div>
       </main>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Password gate (full-page, not a dialog — this is a dedicated route)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// USER MANAGEMENT (admin only)
+// ===========================================================================
 
-function PasswordGate({ onUnlock }: { onUnlock: () => void }) {
-  const [pwd, setPwd] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [attempts, setAttempts] = React.useState(0);
-  const [showPwd, setShowPwd] = React.useState(false);
+function UserManagement({ currentUser }: { currentUser: CurrentUser }) {
+  const [users, setUsers] = React.useState<UserRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  function submit() {
-    if (pwd === SETTINGS_PASSWORD) {
-      setError(null);
-      onUnlock();
-    } else {
-      const n = attempts + 1;
-      setAttempts(n);
-      setError(n >= 3 ? "Hint: the default password is shown below." : "Incorrect password. Try again.");
+  // Create-user form
+  const [newUsername, setNewUsername] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [newRole, setNewRole] = React.useState<"admin" | "user">("user");
+  const [creating, setCreating] = React.useState(false);
+
+  // Password-change dialog
+  const [pwTarget, setPwTarget] = React.useState<UserRow | null>(null);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/users", { cache: "no-store" });
+      if (!r.ok) throw new Error();
+      setUsers(await r.json());
+    } catch {
+      toast.error("Failed to load users");
+    }
+    setLoading(false);
+  }
+
+  React.useEffect(() => { refresh(); }, []);
+
+  async function createUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newUsername.trim() || !newPassword) return;
+    setCreating(true);
+    try {
+      const r = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: newUsername.trim(), password: newPassword, role: newRole }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(data?.error ?? "Failed to create user"); setCreating(false); return; }
+      toast.success(`User "${data.username}" created (${data.role})`);
+      setNewUsername(""); setNewPassword(""); setNewRole("user");
+      refresh();
+    } catch {
+      toast.error("Network error");
+    }
+    setCreating(false);
+  }
+
+  async function changeRole(u: UserRow) {
+    const next = u.role === "admin" ? "user" : "admin";
+    try {
+      const r = await fetch(`/api/users/${u.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: next }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(data?.error ?? "Failed to change role"); return; }
+      toast.success(`${u.username} is now ${next}`);
+      refresh();
+    } catch {
+      toast.error("Network error");
+    }
+  }
+
+  async function deleteUser(u: UserRow) {
+    if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+    try {
+      const r = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(data?.error ?? "Failed to delete user"); return; }
+      toast.success(`User "${u.username}" deleted`);
+      refresh();
+    } catch {
+      toast.error("Network error");
     }
   }
 
   return (
-    <div className="bg-grid min-h-screen flex flex-col text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-panel/95 backdrop-blur supports-[backdrop-filter]:bg-panel/80">
-        <div className="max-w-[1100px] mx-auto px-3 sm:px-4 lg:px-6 h-14 sm:h-16 flex items-center gap-3">
-          <Button variant="outline" size="icon" asChild className="size-9 shrink-0">
-            <Link href="/" aria-label="Back to dashboard"><ArrowLeft className="size-4" /></Link>
-          </Button>
-          <div className="font-bold text-base tracking-wider">SETTINGS</div>
+    <SettingsCard title="User Management" icon={<UsersIcon className="size-4" />}>
+      <div className="text-[11px] text-muted-foreground -mt-1 mb-3">
+        Create users, assign roles, change passwords and remove accounts. Admins get full access; view-only users can see the dashboard but cannot edit, poll or delete.
+      </div>
+
+      {/* Create user */}
+      <form onSubmit={createUser} className="rounded-lg border border-border/60 p-3 mb-3 bg-muted/20">
+        <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <UserPlus className="size-3.5" /> New User
         </div>
-      </header>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_140px_auto] gap-2">
+          <Input
+            value={newUsername}
+            onChange={e => setNewUsername(e.target.value)}
+            placeholder="Username (3-32 chars)"
+            autoCapitalize="none"
+            autoCorrect="off"
+            className="h-9"
+          />
+          <Input
+            type="password"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            placeholder="Password (min 6 chars)"
+            className="h-9"
+          />
+          <Select value={newRole} onValueChange={(v) => setNewRole(v as "admin" | "user")}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="user">View-only</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button type="submit" disabled={creating || !newUsername.trim() || !newPassword} className="h-9 gap-1.5">
+            <Plus className="size-3.5" /> {creating ? "…" : "Create"}
+          </Button>
+        </div>
+      </form>
 
-      <main className="flex-1 flex items-center justify-center px-4 py-10">
-        <Card className="w-full max-w-sm bg-panel border-border/60 shadow-xl">
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex flex-col items-center text-center gap-2">
-              <span className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
-                <Lock className="size-6" />
-              </span>
-              <div className="text-lg font-semibold">Settings Locked</div>
-              <div className="text-xs text-muted-foreground">
-                Enter the settings password to manage dashboard preferences.
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="relative">
-                <Input
-                  type={showPwd ? "text" : "password"}
-                  value={pwd}
-                  onChange={e => { setPwd(e.target.value); setError(null); }}
-                  onKeyDown={e => { if (e.key === "Enter") submit(); }}
-                  placeholder="Password"
-                  autoFocus
-                  className="pr-9"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(v => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-accent"
-                  aria-label={showPwd ? "Hide password" : "Show password"}
-                >
-                  {showPwd ? <EyeOff className="size-3.5 text-muted-foreground" /> : <Eye className="size-3.5 text-muted-foreground" />}
-                </button>
-              </div>
-              {error && (
-                <div className="flex items-center gap-1.5 text-xs text-destructive">
-                  <AlertCircle className="size-3.5" /> {error}
+      {/* User list */}
+      {loading ? (
+        <div className="text-xs text-muted-foreground py-3">Loading users…</div>
+      ) : users.length === 0 ? (
+        <div className="text-xs text-muted-foreground py-3">No users found.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {users.map(u => {
+            const isSelf = u.id === currentUser.id;
+            return (
+              <div key={u.id} className="flex items-center gap-2 p-2.5 rounded-lg border border-border/60">
+                <CircleUser className="size-4 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium truncate">{u.username}</span>
+                    {isSelf && <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">you</span>}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">Created {new Date(u.createdAt).toLocaleString()}</div>
                 </div>
-              )}
-              {attempts >= 3 && (
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  Default password: <code className="font-mono bg-muted px-1.5 py-0.5 rounded">{SETTINGS_PASSWORD}</code>
+                <Badge variant={u.role === "admin" ? "default" : "secondary"} className="text-[9px]">{u.role === "admin" ? "ADMIN" : "VIEW"}</Badge>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => setPwTarget(u)} title="Change password">
+                    <KeyRound className="size-3.5" /> <span className="hidden sm:inline text-xs">Password</span>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => changeRole(u)} title={u.role === "admin" ? "Demote to view-only" : "Promote to admin"}>
+                    <ShieldCheck className="size-3.5" /> <span className="hidden sm:inline text-xs">{u.role === "admin" ? "Demote" : "Promote"}</span>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => deleteUser(u)} disabled={isSelf} title={isSelf ? "You cannot delete your own account" : "Delete user"}>
+                    <Trash2 className="size-3.5" />
+                  </Button>
                 </div>
-              )}
-            </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-            <Button className="w-full gap-1.5" onClick={submit}>
-              <ShieldCheck className="size-4" /> Unlock Settings
-            </Button>
-
-            <Button variant="ghost" size="sm" asChild className="w-full">
-              <Link href="/"><ArrowLeft className="size-3.5" /> Cancel</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+      <ChangePasswordDialog target={pwTarget} onClose={() => setPwTarget(null)} onDone={refresh} />
+    </SettingsCard>
   );
 }
 
-// ---------------------------------------------------------------------------
+function ChangePasswordDialog({ target, onClose, onDone }: {
+  target: UserRow | null; onClose: () => void; onDone: () => void;
+}) {
+  const [pwd, setPwd] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (target) setPwd("");
+  }, [target]);
+
+  async function save() {
+    if (!target || !pwd) return;
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/users/${target.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pwd }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(data?.error ?? "Failed to change password"); setSaving(false); return; }
+      toast.success(`Password updated for "${target.username}"`);
+      onClose();
+      onDone();
+    } catch {
+      toast.error("Network error");
+    }
+    setSaving(false);
+  }
+
+  return (
+    <Dialog open={!!target} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><KeyRound className="size-4" /> Change Password</DialogTitle>
+          <DialogDescription>
+            Set a new password for <span className="font-medium text-foreground">{target?.username}</span>. Minimum 6 characters.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 py-1">
+          <Input
+            type="password"
+            value={pwd}
+            onChange={e => setPwd(e.target.value)}
+            placeholder="New password"
+            autoFocus
+            onKeyDown={e => { if (e.key === "Enter" && pwd.length >= 6) save(); }}
+          />
+          {pwd.length > 0 && pwd.length < 6 && (
+            <div className="text-[11px] text-destructive">Password must be at least 6 characters.</div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+          <Button onClick={save} disabled={saving || pwd.length < 6} className="gap-1.5">
+            <KeyRound className="size-3.5" /> {saving ? "Saving…" : "Save Password"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ===========================================================================
 // Small building blocks
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 function SettingsCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (

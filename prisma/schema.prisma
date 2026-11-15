@@ -197,3 +197,13 @@ model Alert {
   @@index([timestamp])
   @@index([severity])
 }
+
+/// Dashboard user. role: "admin" (full access) or "user" (view-only).
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("user") // "admin" | "user"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

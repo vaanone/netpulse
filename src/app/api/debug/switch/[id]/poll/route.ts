@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { pollSwitch } from "@/lib/snmp";
+import { requireAdmin } from "@/lib/auth";
 
 // GET /api/debug/switch/<id>/poll
 // Polls the switch and returns the raw SNMP result with detailed diagnostics.
 // Useful for figuring out which OIDs return data and which fail.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   const sw = await db.switch.findUnique({ where: { id } });
   if (!sw) return NextResponse.json({ error: "Switch not found" }, { status: 404 });
