@@ -92,3 +92,4 @@ Expression expected
 [poller] Mum-Core-01: running CLI poll (SSH admin@10.10.1.11:22) — cache empty
  GET /?action=manage-companies 200 in 38ms (compile: 3ms, render: 35ms)
  GET /?action=add-switch 200 in 53ms (compile: 2ms, render: 51ms)
+[?25h
