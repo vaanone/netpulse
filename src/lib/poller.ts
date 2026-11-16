@@ -62,7 +62,14 @@ const PREV_COUNTERS = new Map<string, { ts: number; in: bigint; out: bigint }>()
 let CURRENT: Snapshot = { switches: [], links: [], polledAt: new Date(0) };
 let POLLING = false;
 let TIMER: NodeJS.Timeout | null = null;
-const POLL_INTERVAL_MS = 30_000;
+
+// Poll interval is configurable from the Settings page (DB-backed Setting row).
+// On boot we read the stored value; setPollIntervalMs() updates it at runtime.
+export const DEFAULT_POLL_INTERVAL_MS = 30_000;
+export const POLL_INTERVAL_SETTING_KEY = "pollIntervalMs";
+export const MIN_POLL_INTERVAL_MS = 5_000;   // never poll faster than every 5s
+export const MAX_POLL_INTERVAL_MS = 3_600_000; // 1 hour cap
+let currentPollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
 
 // Cache SSH/CLI results — only re-run SSH every 2 minutes, not every 30 seconds.
 // SSH sessions take ~70 seconds per switch, so running every 30s blocks the dashboard.
@@ -724,9 +731,48 @@ async function createAlertIfNew(input: { switchId: string; portId: string | null
 }
 
 export function getSnapshot(): Snapshot { return CURRENT; }
-export function startPolling() {
-  if (TIMER) return;
-  runPollCycle().catch(() => {});
-  TIMER = setInterval(() => { runPollCycle().catch(() => {}); }, POLL_INTERVAL_MS);
+
+// Clamp a candidate interval into the allowed range.
+export function clampPollInterval(ms: number): number {
+  if (!Number.isFinite(ms)) return DEFAULT_POLL_INTERVAL_MS;
+  return Math.min(MAX_POLL_INTERVAL_MS, Math.max(MIN_POLL_INTERVAL_MS, Math.round(ms)));
 }
-export function stopPolling() { if (TIMER) { clearInterval(TIMER); TIMER = null; } }
+
+// Current effective poll interval (ms).
+export function getPollIntervalMs(): number {
+  return currentPollIntervalMs;
+}
+
+// Update the in-memory interval. Takes effect on the next scheduled cycle
+// (the recursive setTimeout re-reads currentPollIntervalMs each time).
+export function setPollIntervalMs(ms: number) {
+  currentPollIntervalMs = clampPollInterval(ms);
+}
+
+// Load the persisted poll interval from the DB (if any) into the in-memory
+// value. Called once when polling starts. Falls back to the default.
+export async function loadPollIntervalFromDb() {
+  try {
+    const row = await db.setting.findUnique({ where: { key: POLL_INTERVAL_SETTING_KEY } });
+    if (row) {
+      const ms = Number(row.value);
+      if (Number.isFinite(ms)) currentPollIntervalMs = clampPollInterval(ms);
+    }
+  } catch (e: any) {
+    console.warn("[poller] could not load poll interval setting:", e?.message);
+  }
+}
+
+export async function startPolling() {
+  if (TIMER) return;
+  await loadPollIntervalFromDb();
+  const scheduleNext = () => {
+    TIMER = setTimeout(async () => {
+      try { await runPollCycle(); } catch {}
+      scheduleNext();
+    }, currentPollIntervalMs);
+  };
+  runPollCycle().catch(() => {});
+  scheduleNext();
+}
+export function stopPolling() { if (TIMER) { clearTimeout(TIMER); TIMER = null; } }

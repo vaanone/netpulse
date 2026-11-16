@@ -27,6 +27,7 @@ import {
   resolveSectionVisible,
   loadBoolSetting,
   saveBoolSetting,
+  loadNumSetting,
 } from "@/lib/settings";
 import {
   Activity, AlertTriangle, ArrowRight, ArrowUpDown, Bell, BellOff, Building2,
@@ -502,9 +503,19 @@ export default function Home() {
   // --- Auto refresh toggle (declared BEFORE queries that use it) ---
   // Use useEffect to load from localStorage after mount (avoids hydration mismatch)
   const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
+  // Configurable refresh interval (seconds). Default 15s. Persisted per-browser.
+  const [autoRefreshSec, setAutoRefreshSec] = React.useState(15);
   React.useEffect(() => {
     setAutoRefreshEnabled(loadBoolSetting(LS_KEYS.autoRefresh));
+    setAutoRefreshSec(loadNumSetting(LS_KEYS.autoRefreshInterval, 15));
   }, []);
+
+  // Derived refresh intervals (ms) from the configured base. Slower-changing
+  // reference data (switches/companies/rings) refreshes at 2× the base; alerts
+  // refresh a bit faster. All scale with the user's Settings choice.
+  const refreshBaseMs = autoRefreshSec * 1000;
+  const refreshSlowMs = refreshBaseMs * 2;
+  const refreshAlertMs = Math.max(Math.round(refreshBaseMs * 2 / 3), 5000);
 
   // --- Queries ---
   const metricsQ = useQuery<MetricsSnapshot>({
@@ -514,7 +525,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load metrics");
       return r.json();
     },
-    refetchInterval: autoRefreshEnabled ? 15_000 : false,
+    refetchInterval: autoRefreshEnabled ? refreshBaseMs : false,
   });
 
   const switchesQ = useQuery<SwitchRow[]>({
@@ -524,7 +535,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load switches");
       return r.json();
     },
-    refetchInterval: autoRefreshEnabled ? 30_000 : false,
+    refetchInterval: autoRefreshEnabled ? refreshSlowMs : false,
   });
 
   const companiesQ = useQuery<CompanyRow[]>({
@@ -534,7 +545,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load companies");
       return r.json();
     },
-    refetchInterval: autoRefreshEnabled ? 30_000 : false,
+    refetchInterval: autoRefreshEnabled ? refreshSlowMs : false,
   });
 
   const ringsQ = useQuery<RingRow[]>({
@@ -544,7 +555,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load rings");
       return r.json();
     },
-    refetchInterval: autoRefreshEnabled ? 30_000 : false,
+    refetchInterval: autoRefreshEnabled ? refreshSlowMs : false,
   });
 
   const alertsQ = useQuery<AlertRow[]>({
@@ -554,7 +565,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Failed to load alerts");
       return r.json();
     },
-    refetchInterval: autoRefreshEnabled ? 10_000 : false,
+    refetchInterval: autoRefreshEnabled ? refreshAlertMs : false,
   });
 
   const [showAllAlerts, setShowAllAlerts] = React.useState(false);
@@ -566,7 +577,7 @@ export default function Home() {
       return r.json();
     },
     enabled: showAllAlerts,
-    refetchInterval: autoRefreshEnabled ? 15_000 : false,
+    refetchInterval: autoRefreshEnabled ? refreshBaseMs : false,
   });
 
   // --- Poll Now mutation ---

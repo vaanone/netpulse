@@ -40,6 +40,7 @@ import {
 import {
   LS_KEYS, TOGGLE_SECTIONS, loadSectionVisibility,
   resolveSectionVisible, loadBoolSetting, saveBoolSetting,
+  loadNumSetting, saveNumSetting,
 } from "@/lib/settings";
 
 interface CurrentUser { id: string; username: string; role: "admin" | "user"; }
@@ -65,12 +66,40 @@ export default function SettingsPage() {
   const [autoRefresh, setAutoRefresh] = React.useState(true);
   const [showJumpTo, setShowJumpTo] = React.useState(true);
   const [showPollNow, setShowPollNow] = React.useState(true);
+
+  // --- Configurable intervals ---
+  // Poll interval is server-wide (DB-backed via /api/settings/poll-interval).
+  // Auto-refresh interval is per-browser (localStorage), like the toggles.
+  const DEFAULT_POLL_SEC = 30;
+  const DEFAULT_REFRESH_SEC = 15;
+  const MIN_SEC = 5, MAX_SEC = 3600;
+  const [pollIntervalSec, setPollIntervalSec] = React.useState(DEFAULT_POLL_SEC);
+  const [pollIntervalInput, setPollIntervalInput] = React.useState(String(DEFAULT_POLL_SEC));
+  const [pollSaving, setPollSaving] = React.useState(false);
+  const [refreshIntervalSec, setRefreshIntervalSec] = React.useState(DEFAULT_REFRESH_SEC);
+  const [refreshIntervalInput, setRefreshIntervalInput] = React.useState(String(DEFAULT_REFRESH_SEC));
+  const [refreshSaving, setRefreshSaving] = React.useState(false);
+
   React.useEffect(() => {
     setSectionVisibility(loadSectionVisibility());
     setAutoPoll(loadBoolSetting(LS_KEYS.autoPoll));
     setAutoRefresh(loadBoolSetting(LS_KEYS.autoRefresh));
     setShowJumpTo(loadBoolSetting(LS_KEYS.jumpTo));
     setShowPollNow(loadBoolSetting(LS_KEYS.pollNow));
+    // Auto-refresh interval (per-browser).
+    const rs = loadNumSetting(LS_KEYS.autoRefreshInterval, DEFAULT_REFRESH_SEC);
+    setRefreshIntervalSec(rs);
+    setRefreshIntervalInput(String(rs));
+    // Poll interval (server-wide) — fetch the current value.
+    fetch("/api/settings/poll-interval", { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && typeof d.intervalSeconds === "number") {
+          setPollIntervalSec(d.intervalSeconds);
+          setPollIntervalInput(String(d.intervalSeconds));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   function toggleSection(id: string) {
@@ -92,6 +121,45 @@ export default function SettingsPage() {
   }
   function togglePollNow() {
     setShowPollNow(prev => { const n = !prev; saveBoolSetting(LS_KEYS.pollNow, n); return n; });
+  }
+
+  // Save the server-wide poll interval (admin only).
+  async function savePollInterval() {
+    const sec = Number(pollIntervalInput);
+    if (!Number.isFinite(sec) || sec < MIN_SEC || sec > MAX_SEC) {
+      toast.error(`Poll interval must be between ${MIN_SEC} and ${MAX_SEC} seconds.`);
+      return;
+    }
+    setPollSaving(true);
+    try {
+      const r = await fetch("/api/settings/poll-interval", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intervalSeconds: sec }),
+      });
+      const d = await r.json();
+      if (!r.ok) { toast.error(d?.error ?? "Failed to update poll interval"); return; }
+      setPollIntervalSec(d.intervalSeconds);
+      setPollIntervalInput(String(d.intervalSeconds));
+      toast.success(`Poll interval set to ${d.intervalSeconds}s`);
+    } catch {
+      toast.error("Failed to update poll interval");
+    } finally {
+      setPollSaving(false);
+    }
+  }
+
+  // Save the per-browser auto-refresh interval.
+  function saveRefreshInterval() {
+    const sec = Number(refreshIntervalInput);
+    if (!Number.isFinite(sec) || sec < MIN_SEC || sec > MAX_SEC) {
+      toast.error(`Auto-refresh interval must be between ${MIN_SEC} and ${MAX_SEC} seconds.`);
+      return;
+    }
+    saveNumSetting(LS_KEYS.autoRefreshInterval, sec);
+    setRefreshIntervalSec(sec);
+    setRefreshIntervalInput(String(sec));
+    toast.success(`Auto-refresh set to ${sec}s`, { description: "Return to the dashboard to apply." });
   }
 
   async function handleLogout() {
@@ -151,8 +219,37 @@ export default function SettingsPage() {
 
         {/* Automation */}
         <SettingsCard title="Automation" icon={<RefreshCw className="size-4" />}>
-          <ToggleRow label="Auto Poll" description="Automatically poll switches every 30 seconds" on={autoPoll} onToggle={toggleAutoPoll} />
-          <ToggleRow label="Auto Refresh" description="Refresh dashboard data every 15 seconds" on={autoRefresh} onToggle={toggleAutoRefresh} />
+          <ToggleRow label="Auto Poll" description={`Automatically poll switches every ${pollIntervalSec} seconds`} on={autoPoll} onToggle={toggleAutoPoll} />
+          <ToggleRow label="Auto Refresh" description={`Refresh dashboard data every ${refreshIntervalSec} seconds`} on={autoRefresh} onToggle={toggleAutoRefresh} />
+
+          <div className="pt-3 mt-2 border-t border-border/50 space-y-3">
+            <IntervalRow
+              label="Poll Interval"
+              description={isAdmin
+                ? "How often the server polls switches via SNMP/CLI. Applies immediately."
+                : "How often the server polls switches. Admins can change this."}
+              value={pollIntervalInput}
+              onChange={setPollIntervalInput}
+              onSave={savePollInterval}
+              saving={pollSaving}
+              disabled={!isAdmin}
+              applied={pollIntervalSec}
+              min={MIN_SEC}
+              max={MAX_SEC}
+            />
+            <IntervalRow
+              label="Auto-Refresh Interval"
+              description="How often your dashboard refetches data. Per-browser; return to the dashboard to apply."
+              value={refreshIntervalInput}
+              onChange={setRefreshIntervalInput}
+              onSave={saveRefreshInterval}
+              saving={refreshSaving}
+              disabled={false}
+              applied={refreshIntervalSec}
+              min={MIN_SEC}
+              max={MAX_SEC}
+            />
+          </div>
         </SettingsCard>
 
         {/* Dashboard sections */}
@@ -491,6 +588,45 @@ function ToggleRow({
       >
         <span className={cn("absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform", on && "translate-x-5")} />
       </button>
+    </div>
+  );
+}
+
+function IntervalRow({
+  label, description, value, onChange, onSave, saving, disabled, applied, min, max,
+}: {
+  label: string; description?: string; value: string;
+  onChange: (v: string) => void; onSave: () => void;
+  saving: boolean; disabled: boolean; applied: number; min: number; max: number;
+}) {
+  const dirty = Number(value) !== applied;
+  return (
+    <div className="flex flex-col gap-1.5 p-2.5 rounded-lg hover:bg-accent/20">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-medium">{label}</div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Input
+            type="number"
+            min={min}
+            max={max}
+            value={value}
+            disabled={disabled}
+            onChange={e => onChange(e.target.value)}
+            className="h-8 w-24 tabular-nums text-right"
+          />
+          <span className="text-[11px] text-muted-foreground">sec</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8"
+            disabled={disabled || saving || !dirty}
+            onClick={onSave}
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+      {description && <div className="text-[11px] text-muted-foreground">{description}</div>}
     </div>
   );
 }

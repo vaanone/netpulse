@@ -9,6 +9,7 @@ export const LS_KEYS = {
   sectionVisibility: "np-vis",
   autoPoll: "np-autopoll",
   autoRefresh: "np-autorefresh",
+  autoRefreshInterval: "np-autorefresh-interval",
   jumpTo: "np-jumpto",
   pollNow: "np-pollnow",
 } as const;
@@ -92,6 +93,25 @@ export function loadBoolSetting(key: string, fallback = true): boolean {
 }
 
 export function saveBoolSetting(key: string, value: boolean) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {}
+}
+
+// Numeric settings stored as strings. Unset / invalid ⇒ fallback.
+// Used for configurable intervals (e.g. auto-refresh seconds).
+export function loadNumSetting(key: string, fallback: number): number {
+  try {
+    const v = localStorage.getItem(key);
+    if (v === null) return fallback;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveNumSetting(key: string, value: number) {
   try {
     localStorage.setItem(key, String(value));
   } catch {}
