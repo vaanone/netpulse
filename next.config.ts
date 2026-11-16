@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: true },
   reactStrictMode: false,
+  // Hide the Next.js devtools indicator (the "N" badge) in the bottom-left.
+  devIndicators: false,
   // Allow loading from any origin on the LAN (IP-based access)
   allowedDevOrigins: ["*.space-z.ai", "*.chatglm.cn", "http://0.0.0.0:3000", "http://*:3000"],
   // CORS for API routes — other PCs need to fetch data
