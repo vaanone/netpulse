@@ -36,6 +36,7 @@ export interface SwitchSnapshot {
   nextSwitchId: string | null; nextSwitchName: string | null;
   prevSwitchId: string | null; prevSwitchName: string | null;
   status: "up" | "down" | "unreachable" | "unknown"; mode: "snmp" | "simulate" | "boot"; error?: string;
+  sshStatus?: "connected" | "error" | null;
   sysName?: string | null; sysDescr?: string | null; uptimeSeconds?: number | null;
   cpuUsage?: number | null; memoryUsed?: number | null; memoryFree?: number | null;
   memoryTotal?: number | null; memoryUsage?: number | null; lastSeen?: Date | null;
@@ -203,11 +204,17 @@ export async function runPollCycle(force: boolean = false): Promise<Snapshot> {
                   console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll succeeded — interfaces=${poll.interfaces.length} neighbors=${poll.neighbors.length} dom=${Object.keys(poll.domReadings).length} uptime=${poll.uptimeSeconds}s (cached for ${SSH_CACHE_TTL_MS / 1000}s)`);
                 } else {
                   console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} returned no useful data, keeping SNMP result`);
+                  // SSH was attempted but returned no useful data (typically a
+                  // connection failure). Record the CLI status on the SNMP
+                  // result so the UI can show "SSH Error" instead of silently
+                  // dropping it.
+                  poll.sshStatus = sshResult.sshStatus ?? "error";
                 }
               }
             } catch (e: any) {
               console.warn(`[poller] ${sw.name}: ${proto.toUpperCase()} poll failed: ${e?.message}`);
               if (poll.error) poll.error += `; ${proto.toUpperCase()} failed: ${e?.message}`;
+              poll.sshStatus = "error";
             }
           }
         }
@@ -364,7 +371,7 @@ export async function runPollCycle(force: boolean = false): Promise<Snapshot> {
         ringId: sw.ring?.id ?? null, ringName: sw.ring?.name ?? sw.ring?.label ?? null, ringLabel: sw.ring?.label ?? null,
         companyName: sw.ring?.company?.name ?? null, nextSwitchId: sw.nextSwitchId ?? null, nextSwitchName: remoteSwitch?.name ?? null,
         prevSwitchId: prevSwitchOf(sw.id)?.id ?? null, prevSwitchName: prevSwitchOf(sw.id)?.name ?? null, status: poll.reachable ? "up" : "unreachable",
-        mode: poll.mode, error: poll.error, sysName: poll.sysName, sysDescr: poll.sysDescr, uptimeSeconds: poll.uptimeSeconds,
+        mode: poll.mode, error: poll.error, sshStatus: poll.sshStatus ?? null, sysName: poll.sysName, sysDescr: poll.sysDescr, uptimeSeconds: poll.uptimeSeconds,
         cpuUsage: poll.cpuUsage, memoryUsed: poll.memoryUsed, memoryFree: poll.memoryFree, memoryTotal, memoryUsage,
         power: poll.power ?? null,
         lastSeen: poll.reachable ? new Date() : null, ports: portsSnap, neighbors: neighborSnap,

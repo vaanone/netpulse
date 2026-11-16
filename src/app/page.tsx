@@ -106,6 +106,7 @@ interface SwitchSnapshot {
   ringLabel: string | null; companyName: string | null;
   nextSwitchId: string | null; nextSwitchName: string | null; prevSwitchId: string | null; prevSwitchName: string | null;
   status: "up" | "down" | "unreachable" | "unknown"; mode: "snmp" | "simulate" | "boot"; error?: string;
+  sshStatus?: "connected" | "error" | null;
   sysName?: string | null; sysDescr?: string | null; uptimeSeconds?: number | null;
   cpuUsage?: number | null; memoryUsed?: number | null; memoryFree?: number | null;
   memoryTotal?: number | null; memoryUsage?: number | null; lastSeen?: string | Date | null;
@@ -1016,10 +1017,14 @@ function Header(props: {
                   <div className="font-medium">{user.username}</div>
                   <div className="text-muted-foreground">{isAdmin ? "Administrator — full access" : "View-only user"}</div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/settings" className="gap-2 cursor-pointer"><Settings className="size-3.5" /> Settings</Link>
-                </DropdownMenuItem>
+                {isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/settings" className="gap-2 cursor-pointer"><Settings className="size-3.5" /> Settings</Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} disabled={loggingOut} className="gap-2 cursor-pointer text-destructive focus:text-destructive">
                   <LogOut className="size-3.5" /> {loggingOut ? "Signing out…" : "Sign out"}
@@ -3617,6 +3622,11 @@ function SwitchDetailDialog(props: {
                   <Badge variant="outline" className="text-[10px]">SNMP {snmpVersionLabel(sw.snmpVersion)}</Badge>
                   {sw.ringLabel && <Badge variant="outline" className="text-[10px]">{sw.ringLabel}</Badge>}
                   {sw.companyName && <Badge variant="outline" className="text-[10px]">{sw.companyName}</Badge>}
+                  {sw.sshStatus && (
+                    <Badge variant="outline" className={cn("text-[10px] gap-1", sw.sshStatus === "connected" ? "bg-ok/15 text-ok border-ok/40" : "bg-crit/15 text-crit border-crit/40")}>
+                      {sw.sshStatus === "connected" ? "SSH Connected" : "SSH Error"}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>

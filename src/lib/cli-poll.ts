@@ -1315,6 +1315,7 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
     reachable: true,
     mode: "snmp",
     error: undefined,
+    sshStatus: "connected",
     sysDescr: null,
     sysName: row.name,
     uptimeSeconds: null,
@@ -1365,6 +1366,7 @@ async function tryPollWithConfig(config: CliConfig, row: SwitchRow): Promise<Pol
       ...result,
       reachable: false,
       mode: "simulate",
+      sshStatus: "error",
       error: `${config.protocol.toUpperCase()} connection failed: ${e.message}`,
     };
   }

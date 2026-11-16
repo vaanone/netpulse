@@ -85,6 +85,10 @@ export interface PollResult {
   reachable: boolean;
   mode: "snmp" | "simulate";
   error?: string;
+  // CLI (SSH/Telnet) fallback connection status. null/undefined when CLI
+  // fallback is not enabled for this switch. "connected" = CLI session
+  // established and returned data; "error" = CLI connection failed.
+  sshStatus?: "connected" | "error" | null;
   sysDescr?: string | null;
   sysName?: string | null;
   uptimeSeconds?: number | null;
