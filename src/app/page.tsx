@@ -195,9 +195,6 @@ function useCurrentUser() { return React.useContext(UserContext); }
 // Settings password — shared with /settings via @/lib/settings.
 const SETTINGS_PASSWORD = SHARED_SETTINGS_PASSWORD;
 
-const POLL_INTERVAL_LABEL = "Poll interval 30s";
-const AUTO_REFRESH_LABEL = "Auto-refresh 15s";
-
 const SECTION_IDS = [
   "summary-kpis",
   "ring-topology",
@@ -580,6 +577,19 @@ export default function Home() {
     refetchInterval: autoRefreshEnabled ? refreshBaseMs : false,
   });
 
+  // Server-wide poll interval — shown in the footer, kept in sync so a change
+  // made on the Settings page is reflected here without a full reload.
+  const pollIntervalQ = useQuery<{ intervalSeconds: number }>({
+    queryKey: ["poll-interval"],
+    queryFn: async () => {
+      const r = await fetch("/api/settings/poll-interval", { cache: "no-store" });
+      if (!r.ok) throw new Error("Failed to load poll interval");
+      return r.json();
+    },
+    refetchInterval: autoRefreshEnabled ? refreshSlowMs : false,
+  });
+  const pollIntervalSec = pollIntervalQ.data?.intervalSeconds ?? 30;
+
   // --- Poll Now mutation ---
   const pollMut = useMutation({
     mutationFn: async () => {
@@ -867,7 +877,7 @@ export default function Home() {
       {/* =========================================================
           FOOTER
       ========================================================== */}
-      <Footer polledAt={snapshot?.polledAt} />
+      <Footer polledAt={snapshot?.polledAt} pollIntervalSec={pollIntervalSec} autoRefreshSec={autoRefreshSec} />
 
       {/* =========================================================
           DIALOGS
@@ -2325,16 +2335,16 @@ function AllInterfaces(props: {
 // FOOTER
 // ===========================================================================
 
-function Footer({ polledAt }: { polledAt?: string }) {
+function Footer({ polledAt, pollIntervalSec = 30, autoRefreshSec = 15 }: { polledAt?: string; pollIntervalSec?: number; autoRefreshSec?: number }) {
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-panel/95 backdrop-blur">
       <div className="max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-6 h-10 flex items-center justify-center text-[10px] sm:text-xs text-muted-foreground gap-2 flex-wrap">
         <span className="size-1.5 rounded-full bg-primary shrink-0" />
         <span className="truncate">NETPULSE ISP Network Manager - A JJ TechHub Product</span>
         <span className="hidden sm:inline">·</span>
-        <span className="hidden sm:inline">{POLL_INTERVAL_LABEL}</span>
+        <span className="hidden sm:inline">Poll interval {pollIntervalSec}s</span>
         <span>·</span>
-        <span>{AUTO_REFRESH_LABEL}</span>
+        <span>Auto-refresh {autoRefreshSec}s</span>
         <span>·</span>
         <span>Last poll <span className="text-foreground font-mono">{polledAt ? fmtTime(polledAt) : "—"}</span></span>
       </div>

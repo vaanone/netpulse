@@ -51,11 +51,27 @@ export async function PUT(req: NextRequest) {
     }, { status: 400 });
   }
 
-  await db.setting.upsert({
-    where: { key: POLL_INTERVAL_SETTING_KEY },
-    update: { value: String(clamped) },
-    create: { key: POLL_INTERVAL_SETTING_KEY, value: String(clamped) },
-  });
+  // Guard: if the Prisma client was generated before the Setting model was
+  // added (i.e. the user pulled the code but didn't run `db:push`/`generate`),
+  // db.setting is undefined and the upsert below would throw an opaque 500.
+  if (!db.setting) {
+    return NextResponse.json({
+      error: "The Setting table is not available. Run `bun run db:push` (or `npx prisma db push && npx prisma generate`) to create it, then restart the dev server.",
+    }, { status: 500 });
+  }
+
+  try {
+    await db.setting.upsert({
+      where: { key: POLL_INTERVAL_SETTING_KEY },
+      update: { value: String(clamped) },
+      create: { key: POLL_INTERVAL_SETTING_KEY, value: String(clamped) },
+    });
+  } catch (e: any) {
+    return NextResponse.json({
+      error: "Could not save the poll interval to the database. Run `bun run db:push` to create the Setting table, then restart the dev server.",
+      detail: String(e?.message ?? e),
+    }, { status: 500 });
+  }
   setPollIntervalMs(clamped);
 
   return NextResponse.json({
