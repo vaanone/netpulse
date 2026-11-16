@@ -6,15 +6,15 @@ $ next dev -H 0.0.0.0 -p 3000
 
 ✓ Starting...
 ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
-✓ Ready in 732ms
- GET /login 200 in 2.3s (compile: 1967ms, proxy.ts: 51ms, render: 233ms)
+✓ Ready in 683ms
+ GET /login 200 in 2.6s (compile: 2.4s, proxy.ts: 52ms, render: 174ms)
 SESSION_SECRET not set — using insecure dev fallback.
- POST /api/auth/login 200 in 111ms (compile: 47ms, proxy.ts: 5ms, render: 58ms)
- GET /login 200 in 940ms (compile: 707ms, proxy.ts: 3ms, render: 230ms)
- GET /api/settings/poll-interval 200 in 85ms (compile: 76ms, proxy.ts: 5ms, render: 4ms)
+ POST /api/auth/login 200 in 151ms (compile: 73ms, proxy.ts: 6ms, render: 73ms)
+ GET /api/settings/poll-interval 200 in 97ms (compile: 89ms, proxy.ts: 4ms, render: 4ms)
+ GET / 200 in 1296ms (compile: 1177ms, proxy.ts: 2ms, render: 116ms)
+ GET /settings 200 in 94ms (compile: 43ms, proxy.ts: 3ms, render: 48ms)
 SESSION_SECRET not set — using insecure dev fallback.
- PUT /api/settings/poll-interval 200 in 13ms (compile: 2ms, proxy.ts: 3ms, render: 8ms)
- GET /api/auth/me 401 in 37ms (compile: 29ms, proxy.ts: 3ms, render: 6ms)
+ PUT /api/settings/poll-interval 200 in 14ms (compile: 2ms, proxy.ts: 3ms, render: 8ms)
 [snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
 [snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
 [snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
@@ -36,17 +36,4 @@ SESSION_SECRET not set — using insecure dev fallback.
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
 [poller] Mum-Core-01: running CLI poll (SSH admin@10.10.1.11:22) — cache empty
- GET /login 200 in 40ms (compile: 4ms, proxy.ts: 4ms, render: 32ms)
-SESSION_SECRET not set — using insecure dev fallback.
- POST /api/auth/login 200 in 54ms (compile: 2ms, proxy.ts: 4ms, render: 48ms)
- GET / 200 in 1597ms (compile: 1432ms, proxy.ts: 3ms, render: 162ms)
- GET /settings 200 in 109ms (compile: 44ms, proxy.ts: 17ms, render: 48ms)
-SESSION_SECRET not set — using insecure dev fallback.
- PUT /api/settings/poll-interval 200 in 59ms (compile: 43ms, proxy.ts: 3ms, render: 12ms)
- GET /api/settings/poll-interval 200 in 28ms (compile: 2ms, proxy.ts: 3ms, render: 23ms)
-[ssh] 10.10.1.11: ERROR — connect ETIMEDOUT 10.10.1.11:22
-[poller] Mum-Core-01: SSH poll succeeded — interfaces=0 neighbors=0 dom=0 uptime=nulls (cached for 120s)
-[ssh] 10.10.1.11: connection closed (got 0/7 results)
-SESSION_SECRET not set — using insecure dev fallback.
- PUT /api/settings/poll-interval 200 in 15ms (compile: 3ms, proxy.ts: 4ms, render: 9ms)
 [?25h
