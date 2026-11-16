@@ -6,21 +6,13 @@ $ next dev -H 0.0.0.0 -p 3000
 
 ✓ Starting...
 ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
-✓ Ready in 762ms
- GET /login 200 in 2.8s (compile: 2.6s, proxy.ts: 69ms, render: 176ms)
+✓ Ready in 767ms
+ GET /login 200 in 2.7s (compile: 2.5s, proxy.ts: 53ms, render: 179ms)
 SESSION_SECRET not set — using insecure dev fallback.
- POST /api/auth/login 200 in 170ms (compile: 102ms, proxy.ts: 6ms, render: 62ms)
- GET / 200 in 1993ms (compile: 1861ms, proxy.ts: 5ms, render: 127ms)
- GET /settings 200 in 217ms (compile: 153ms, proxy.ts: 3ms, render: 61ms)
- GET /api/settings/poll-interval 200 in 243ms (compile: 232ms, proxy.ts: 5ms, render: 6ms)
-SESSION_SECRET not set — using insecure dev fallback.
- PUT /api/settings/poll-interval 200 in 21ms (compile: 3ms, proxy.ts: 4ms, render: 15ms)
- GET /api/settings/poll-interval 200 in 18ms (compile: 1840µs, proxy.ts: 13ms, render: 3ms)
-SESSION_SECRET not set — using insecure dev fallback.
- PUT /api/settings/poll-interval 400 in 12ms (compile: 2ms, proxy.ts: 3ms, render: 6ms)
- POST /api/auth/login 401 in 45ms (compile: 1952µs, proxy.ts: 3ms, render: 40ms)
-SESSION_SECRET not set — using insecure dev fallback.
- PUT /api/settings/poll-interval 200 in 10ms (compile: 1955µs, proxy.ts: 3ms, render: 5ms)
+ POST /api/auth/login 200 in 178ms (compile: 100ms, proxy.ts: 5ms, render: 73ms)
+ GET / 200 in 1416ms (compile: 1294ms, proxy.ts: 5ms, render: 117ms)
+ GET /settings 200 in 97ms (compile: 44ms, proxy.ts: 3ms, render: 49ms)
+ GET /login 200 in 28ms (compile: 3ms, proxy.ts: 3ms, render: 23ms)
 [snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
 [snmp] ifIndex returned 0 entries even after GETNEXT fallback. Switch may have IF-MIB access restricted.
 [snmp] Interfaces: ifIdx=0 ifDescr=0 ifName=0 ifOper=0
@@ -37,6 +29,8 @@ SESSION_SECRET not set — using insecure dev fallback.
 [snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
 [snmp] CDP discovery: devId=0 devPort=0 addr=0 plat=0
 [snmp] CDP: 0 neighbors found. Verify on switch CLI: 'show cdp neighbors' should list devices, and 'show snmp mib | inc cdpCache' should expose the MIB.
+ GET /login 200 in 34ms (compile: 3ms, proxy.ts: 4ms, render: 28ms)
+ GET /login 200 in 28ms (compile: 2ms, proxy.ts: 3ms, render: 22ms)
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
 [snmp] LLDP discovery: sysName=0 portDesc=0 portId=0
