@@ -8,6 +8,7 @@ next-env.d.ts
 .env
 db/*.db
 db/*.db-journal
+db/server-settings.json
 dev.log
 server.log
 *.log

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { setSetting } from "@/lib/server-settings";
 import {
   getPollIntervalMs,
   setPollIntervalMs,
@@ -26,7 +26,8 @@ export async function GET() {
 
 // PUT /api/settings/poll-interval — update the server-wide poll interval.
 // Admin only. Body: { "intervalSeconds": 30 } (or "intervalMs": 30000).
-// Persists to the DB (survives restarts) and applies immediately.
+// Persists to db/server-settings.json (survives restarts) and applies
+// immediately — no DB migration required.
 export async function PUT(req: NextRequest) {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
@@ -51,24 +52,11 @@ export async function PUT(req: NextRequest) {
     }, { status: 400 });
   }
 
-  // Guard: if the Prisma client was generated before the Setting model was
-  // added (i.e. the user pulled the code but didn't run `db:push`/`generate`),
-  // db.setting is undefined and the upsert below would throw an opaque 500.
-  if (!db.setting) {
-    return NextResponse.json({
-      error: "The Setting table is not available. Run `bun run db:push` (or `npx prisma db push && npx prisma generate`) to create it, then restart the dev server.",
-    }, { status: 500 });
-  }
-
   try {
-    await db.setting.upsert({
-      where: { key: POLL_INTERVAL_SETTING_KEY },
-      update: { value: String(clamped) },
-      create: { key: POLL_INTERVAL_SETTING_KEY, value: String(clamped) },
-    });
+    setSetting(POLL_INTERVAL_SETTING_KEY, String(clamped));
   } catch (e: any) {
     return NextResponse.json({
-      error: "Could not save the poll interval to the database. Run `bun run db:push` to create the Setting table, then restart the dev server.",
+      error: "Could not save the poll interval to the settings file.",
       detail: String(e?.message ?? e),
     }, { status: 500 });
   }

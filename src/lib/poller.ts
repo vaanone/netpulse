@@ -5,6 +5,7 @@
  */
 
 import { db } from "@/lib/db";
+import { getSetting } from "@/lib/server-settings";
 import { pollSwitch, simulateSwitch, type PollResult, type PowerSummary, type PowerSupply } from "@/lib/snmp";
 import { pollSwitchViaSsh } from "@/lib/cli-poll";
 
@@ -63,13 +64,20 @@ let CURRENT: Snapshot = { switches: [], links: [], polledAt: new Date(0) };
 let POLLING = false;
 let TIMER: NodeJS.Timeout | null = null;
 
-// Poll interval is configurable from the Settings page (DB-backed Setting row).
-// On boot we read the stored value; setPollIntervalMs() updates it at runtime.
+// Poll interval is configurable from the Settings page and persisted to
+// db/server-settings.json (see src/lib/server-settings.ts). We read the stored
+// value at module load so it is available immediately after a restart — even
+// before the poller's first cycle runs. setPollIntervalMs() updates it at
+// runtime (the API route also writes the file).
 export const DEFAULT_POLL_INTERVAL_MS = 30_000;
 export const POLL_INTERVAL_SETTING_KEY = "pollIntervalMs";
 export const MIN_POLL_INTERVAL_MS = 5_000;   // never poll faster than every 5s
 export const MAX_POLL_INTERVAL_MS = 3_600_000; // 1 hour cap
 let currentPollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
+try {
+  const _ms = Number(getSetting(POLL_INTERVAL_SETTING_KEY, String(DEFAULT_POLL_INTERVAL_MS)));
+  if (Number.isFinite(_ms)) currentPollIntervalMs = clampPollInterval(_ms);
+} catch {}
 
 // Cache SSH/CLI results — only re-run SSH every 2 minutes, not every 30 seconds.
 // SSH sessions take ~70 seconds per switch, so running every 30s blocks the dashboard.
@@ -749,15 +757,14 @@ export function setPollIntervalMs(ms: number) {
   currentPollIntervalMs = clampPollInterval(ms);
 }
 
-// Load the persisted poll interval from the DB (if any) into the in-memory
-// value. Called once when polling starts. Falls back to the default.
-export async function loadPollIntervalFromDb() {
+// Load the persisted poll interval from the server settings file (if any)
+// into the in-memory value. Called once when polling starts. Falls back to
+// the default. No DB/migration required — see src/lib/server-settings.ts.
+export function loadPollIntervalFromStore() {
   try {
-    const row = await db.setting.findUnique({ where: { key: POLL_INTERVAL_SETTING_KEY } });
-    if (row) {
-      const ms = Number(row.value);
-      if (Number.isFinite(ms)) currentPollIntervalMs = clampPollInterval(ms);
-    }
+    const raw = getSetting(POLL_INTERVAL_SETTING_KEY, String(DEFAULT_POLL_INTERVAL_MS));
+    const ms = Number(raw);
+    if (Number.isFinite(ms)) currentPollIntervalMs = clampPollInterval(ms);
   } catch (e: any) {
     console.warn("[poller] could not load poll interval setting:", e?.message);
   }
@@ -765,7 +772,7 @@ export async function loadPollIntervalFromDb() {
 
 export async function startPolling() {
   if (TIMER) return;
-  await loadPollIntervalFromDb();
+  loadPollIntervalFromStore();
   const scheduleNext = () => {
     TIMER = setTimeout(async () => {
       try { await runPollCycle(); } catch {}

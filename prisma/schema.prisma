@@ -207,11 +207,3 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
-
-/// Server-wide key/value settings configurable from the Settings page
-/// (e.g. pollIntervalMs). Distinct from the per-browser localStorage toggles.
-model Setting {
-  key       String   @id
-  value     String
-  updatedAt DateTime @updatedAt
-}
