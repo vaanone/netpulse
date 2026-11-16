@@ -494,7 +494,9 @@ function SectionTitle({ icon, title, subtitle, action }: {
 // MAIN HOME COMPONENT
 // ===========================================================================
 
-export default function Home() {
+// useSearchParams() below requires a Suspense boundary for static prerender;
+// the default export at the end of this file wraps this component.
+function HomeInner() {
   const queryClient = useQueryClient();
 
   // --- Auto refresh toggle (declared BEFORE queries that use it) ---
@@ -4552,5 +4554,16 @@ function AllAlertRow({ alert, onAck, onResolve, onSwitchClick }: {
         )}
       </div>
     </div>
+  );
+}
+
+// ===========================================================================
+// DEFAULT EXPORT — wrap in Suspense so useSearchParams() can prerender
+// ===========================================================================
+export default function Home() {
+  return (
+    <React.Suspense fallback={null}>
+      <HomeInner />
+    </React.Suspense>
   );
 }
